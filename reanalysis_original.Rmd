@@ -1,0 +1,270 @@
+---
+title: "Re-analysis of original study (Shebani and Pulvermüller, 2013)"
+author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
+date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+output:
+  html_document:
+    depth: 2
+    number_sections: yes
+    theme: default
+    toc: yes
+---
+
+Setup workspace
+===============
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("knitr")
+library("lme4")
+library("brms")
+library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
+library("boot")       # for inv.logit()
+```
+
+
+
+Original data set
+=================
+
+
+```{r}
+# Load data
+d_all_conds <- read_csv("orig_study/SP13_orig-data_total-errors_long-format.csv")
+```
+
+```{r}
+kable(head(d_all_conds))
+str(d_all_conds)
+```
+
+- The data show the total number of errors, adding all three types of errors:
+omissions, replacements, and transpositions.
+- This data set contains the data for all four movement conditions:
+`r unique(d_all_conds$movement)`. However, we are only interested in
+the arm/leg movement conditions, so we subset the data:
+
+```{r}
+d <- d_all_conds %>% filter(movement %in% c("arm_paradi", "leg_paradi"))
+kable(head(d))
+str(d)
+```
+
+
+Plot the data:
+
+```{r}
+ggplot(d, aes(x = word_type, y = errors, colour = word_type)) +
+  geom_boxplot() +
+  facet_grid(. ~ movement)
+```
+
+We can qualitatively see the cross-over interaction. Note that although the
+variability is large, the effect is still able to come out if there is sufficient
+consistency within subjects, as it is a within-subjects design. This can be
+better appreciated in the following plot:
+
+```{r}
+d %>% mutate(sbj_wtype = paste(subject, word_type, sep = "_")) %>%
+  ggplot(aes(x = movement, colour = word_type, y = errors)) +
+  geom_jitter(height = 0, width = .05, alpha = .5) +
+  geom_line(aes(group = sbj_wtype), alpha = .5) +
+  stat_summary(fun.y = mean, geom = "point", size = 4,
+               position = position_dodge(width = .2)) +
+  stat_summary(fun.y = mean, geom = "line", aes(group = word_type), size = 2,
+               position = position_dodge(width = .2)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.2, size = 2,
+               position = position_dodge(width = .2))
+```
+
+The thick dots and lines show mean number of errors and bootstrapped
+(non-parametric) 95% CIs.
+The thinner dots and lines show subject data. There seems to be quite a lot of
+consistency by subjects, i.e. the slopes of the thin lines mostly go in the same
+direction as the slope of the thicker lines.
+
+
+
+Treat data as coming from a binomial distribution, but what is $n$?
+======================================================
+
+SP13 analyzed the data using ANOVAs and t-tests. We instead want to model the
+dependent variable (DV = number of errors per experimental cell) as coming from
+a binomial distribution: 
+
+$$errors \sim B(n, p)$$
+
+Here, $n$ is the upper bound on the possible number of errors and $p$ is the
+probability of making an error for each word.
+We will assume that the maximum number of errors for each trial (i.e., sequence
+of 4 words) is 4.
+However, we also need to determine how many trials there were per cell and this
+is slightly tricky, because SP13 report this inconsistently.
+
+## Email correspondence with authors
+
+We emailed the original authors about this. Here is the relevant extract, with 
+the authors' responses as inline comments (email correspondence from 1 Apr 2018):
+
+> **Number of trials**
+>
+> It says that 24 trials were presented in each block, twelve arm-word and 12 leg-word trials (sect. 2.3, p.225 left
+column [=LC]). It also says that 4 words were presented per trial (sect. 2.3, p.224 right column [=RC]). This implies
+that 48 words of each category were shown per block. Since the lists consist of 36 words per category, the above
+would suggest that some words were repeated in each block (e.g., 12 words per category repeated once), but this is
+not explicitly stated. Was this the case?
+>
+>> Yes, 48 words from each category were shown in each block. Twelve words per category, randomly selected, were
+repeated once in each block.
+>
+> It then says that conditions were run as separate blocks (sect. 2.3, p.225 LC) and that the full set of 72 words were
+presented twice in each condition (sect. 2.3, p.225 RC). These figures don’t seem to add up: For 72 * 2 = 144 words
+to be presented, this would require 144 / 4 = 36 trials (assuming 4 words are presented in each trial). In other words,
+one would need 1.5 blocks per condition, whereas in the study it says that “the conditions were run as separate
+blocks with twenty-four trials in each block” (p.225). Is there perhaps a typo in the reported numbers, or do we err
+in our reasoning? In sum, what was the exact number of words per trial, trials per block (we assume equal number
+of leg- and arm-word trials), and blocks per condition?
+>
+>> Line 2 of page 225, RC does indeed contain a typo. As mentioned above, 48 words from each category were
+presented in each block (36 +12 = 48), therefore, not all words were repeated twice in each block/condition.
+In sum:
+Words per trial: 4
+Trials per block: 24 (12 arm word and 12 leg word trials)
+Blocks in the experiment: 4
+Blocks per condition: 1
+
+
+## We set $n = 48$
+
+Based on this correspondence, we take there to be 12 trials per experimental
+cell. Since we assume the maximum number of errors per trial is 4,
+$n = 12 \times 4 = 48$.
+
+```{r}
+d$n <- 48
+```
+
+
+
+GLMM with *lme4*
+================
+
+We start by fitting a frequentist GLMM with *lme4* for a first quick
+interpretation of the estimated model coefficients.
+
+Coding scheme
+-------------
+
+Set coding scheme to contrast coding:
+
+```{r}
+# movement condition
+d$movement <- factor(d$movement)
+contrasts(d$movement) <- contr.sum(2)
+colnames(contrasts(d$movement)) <- "arm_vs_leg"
+contrasts(d$movement)
+# word type
+d$word_type <- factor(d$word_type)
+contrasts(d$word_type) <- contr.sum(2)
+colnames(contrasts(d$word_type)) <- "arm_vs_leg"
+contrasts(d$word_type)
+```
+
+
+Binomial GLMM
+-------------
+
+```{r}
+fm_binom <- glmer(cbind(errors, n) ~ 1 + movement * word_type + (1 | subject),
+                  data = d, family = "binomial")
+summary(fm_binom)
+```
+
+Interpretation (backtransforming to odds):
+
+- The estimated average odds of an error (intercept) is 
+$e ^ {`r round(fixef(fm_binom)[1], 2)`} = `r round(exp(fixef(fm_binom)[1]), 2)`$
+(corresponding to a probability of
+`r round(inv.logit(fixef(fm_binom)[1]), 2)`)
+- Neither the type of movement (`movement`) or the type of word (`word_type`)
+have a significant effect on the odds of making an error.
+- The critical interaction is significant and tells us that the odds of making
+an error if the effector of the movement *coincides* with the word type (as
+opposed to when they differ) is
+$e ^ {`r round(fixef(fm_binom)[4], 2)`} =`r round(exp(fixef(fm_binom)[4]), 2)`$.
+This is the *interference effect* of interest!
+
+
+
+Bayesian GLMM with *brms*
+=========================
+
+We fit a binomial model using all of the default options for priors, etc.
+(For the syntax of how to specify the response variable in a binomial model,
+see Bürkner 2017, p.7, fn 3.)
+
+```{r}
+# bfm_binom <- brm(errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
+#                  data = d,
+#                  family = "binomial")
+```
+
+```{r}
+# To save time the fitted model has been saved to file
+bfm_binom <- readRDS("bayes_glmm_default.rds")
+```
+
+
+
+```{r}
+summary(bfm_binom)
+```
+
+Surprisingly, the point estimates differ quite a bit between the *brms* and
+*lme4* fits.
+The 95% credible interval for the critical interaction
+$[`r round(fixef(bfm_binom)[4,3], 2)`, `r round(fixef(bfm_binom)[4,4], 2)`]$
+clearly contains the
+point estimate from the *lme4* model, but the point estimate in the Bayesian
+model is bigger 
+($`r round(fixef(bfm_binom)[4,1], 2)` > `r round(fixef(fm_binom)[4], 2)`$).
+Interestingly note that the estimated SEM is quite comparable.
+
+*brms* allows us to perform "non-linear hypothesis testing". Let us test the
+hypothesis that the crucial interaction is larger than zero (i.e., there is an
+interference effect):
+
+```{r}
+hypothesis(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg > 0")
+```
+
+The evidence ratio for an interference effect is overwhelming.
+
+We can also plot the posterior distribution of the model estimates:
+
+```{r, fig.height=7}
+plot(bfm_binom)
+```
+
+
+
+Use posterior distribution of interaction coefficient as effect size prior for BFDA
+============================================
+
+We now want to plug in an expected effect size into our BF design analysis.
+
+How do we do this???
+
+
+
+
+Session info
+============
+
+```{r}
+sessionInfo()
+```
+
