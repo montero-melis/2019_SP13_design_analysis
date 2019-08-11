@@ -257,10 +257,17 @@ plot(bfm_binom)
 Use posterior distribution of interaction coefficient as effect size prior for BFDA
 ============================================
 
-We now want to plug in an expected effect size into our BF design analysis.
+*brms* has a `posterior_samples(x, pars)` function to get posterior traces for
+specific coefficients. We pass our fitted *brms* model as x, and the predictor
+of interest as pars, and obtain a dataframe with the samples in return.
 
-How do we do this???
+This posterior from the original we can then use as the prior for the design
+analysis in our replication.
 
+```{r}
+beta_posterior <- posterior_samples(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg")
+write_csv(beta_posterior, "beta_posterior.csv")
+```
 
 
 
