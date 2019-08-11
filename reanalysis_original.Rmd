@@ -210,11 +210,13 @@ see Bürkner 2017, p.7, fn 3.)
 ```{r}
 # bfm_binom <- brm(errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
 #                  data = d,
-#                  family = "binomial")
+#                  family = "binomial",
+#                  warmup = 2000, iter = 7000)
 ```
 
 ```{r}
 # To save time the fitted model has been saved to file
+# saveRDS(bfm_binom, "bayes_glmm_default.rds")
 bfm_binom <- readRDS("bayes_glmm_default.rds")
 ```
 
