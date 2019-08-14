@@ -1,0 +1,454 @@
+---
+title: "BF design analysis for SP13 replication"
+author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
+date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+output:
+  html_document:
+    depth: 2
+    number_sections: yes
+    theme: default
+    toc: yes
+---
+
+Setup workspace
+===============
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("knitr")
+library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
+library("boot")       # for inv.logit()
+library("BFDA")
+```
+
+Load posterior estimates from `brms` model fitted to original data:
+
+```{r}
+# read and convert to vector
+beta_post <- read_csv("beta_posterior.csv") %>%
+  pull(1)
+```
+
+
+BFDA using effect size based on original study
+============================
+
+
+Simulate hypothetical studies under estimated effect size
+-----------------------------
+
+
+We use `type = "abtest"` for the binomial model. Note that as our expected
+effect size (i.e.,  the input for `expected.ES` argument) we use the posterior
+from our `brms` model fit to the original data (see `reanalysis_original.Rmd`).
+
+```{r}
+# # Under alternative hypothesis H1
+# sim.H1 <- BFDA.sim(expected.ES = beta_post,  # posterior of original becomes prior
+#                    type = "abtest",
+#                    # prior,  # unsure about this parameter!
+#                    n.min=60, n.max=300, alternative="greater", boundary=Inf, B=1000,
+#                    options.sample = list(effecttype = "logOR"),
+#                    verbose=TRUE, cores=1, stepsize = 20)
+
+# Save/load to/from disk
+# write_rds(sim.H1, "sim_H1.rds")
+sim.H1 <- read_rds("sim_H1.rds")
+sim.H1
+```
+
+```{r}
+# # Under null hypothesis H0
+# sim.H0 <- BFDA.sim(expected.ES = 0,  # no effect
+#                    type = "abtest",
+#                    # prior,  # unsure about this parameter!
+#                    n.min=60, n.max=300, alternative="greater", boundary=Inf, B=1000,
+#                    options.sample = list(effecttype = "logOR"),
+#                    verbose=TRUE, cores=1, stepsize = 20)
+
+# Save/load to/from disk
+# write_rds(sim.H0, "sim_H0.rds")
+sim.H0 <- read_rds("sim_H0.rds")
+sim.H0
+```
+
+
+Fixed-n design
+--------------
+
+The amount of conclusive evidence we obtain at N=180 is vanishingly small!
+
+```{r}
+BFDA.analyze(sim.H1, design="fixed", n=180, boundary=6)
+BFDA.analyze(sim.H0, design="fixed", n=180, boundary=6)
+```
+
+
+```{r}
+evDens(BFDA.H1=sim.H1, BFDA.H0=sim.H0, n=180, boundary=c(1/6, 6), xlim=c(1/11, 31))
+```
+
+
+
+Sequential design
+-----------------
+
+A sequential design (well, with maxN = 300) still remains largely inconclusive.
+
+### Under H1
+
+```{r}
+BFDA.analyze(sim.H1, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+Note that we *incorrectly accept* the null hypothesis more often than we
+*correctly reject* the alternative hypothesis!
+
+
+```{r}
+plot(sim.H1, n.min=60, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+```{r}
+BFDA.analyze(sim.H0, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+
+```{r}
+plot(sim.H0, n.min=60, boundary=c(1/6, 6))
+```
+
+
+Find N to achieve power = .80
+----------------
+
+The N necessary to achieve 80% power is way out there (not even on the map)!
+
+```{r}
+SSD(sim.H1, power=.80, boundary=c(1/6, 6))
+```
+
+
+Conclusion
+----------
+
+Even though the interaction effect came out as very robust in the brms analysis,
+the current design analysis indicates that we'd need a prohibitively large N to
+achieve an efficient design that allows for strong inference.
+
+Why is this the case?
+
+
+Why is N so absurdly large?
+==========================
+
+MAN = [BFDA manual](https://rawgit.com/nicebread/BFDA/master/package/doc/BFDA_manual.html)
+
+
+
+The ES is specified using the `expected.ES` argument in the
+`BFDA::BFDA.sim()` function. However, which metric is used to specify the ES
+depends on the type of design we are analyzing (see `type` argument):
+
+For t-tests, ES is provided as Cohen's $d$ (see MAN). Cohen's $d$ is a standardized
+measure of the difference between two means. In essence, it is computed as the
+ratio of the difference in mean and the SD, see 
+https://en.wikiversity.org/wiki/Cohen%27s_d.
+This metric thus takes into account the robustness, rather than the magnitude,
+of the effect. An effect can be "small but robust".
+
+For the AB test, in contrast, you use an "odds ratio, a log odds ratio, a
+relative risk, or an absolute risk to define a design prior on the population 
+effect size" (MAN). Because the effect is essentially defined as a change in
+probability (with a corresponding transformation, e.g. into log-odds space),
+the mean effect and the variance are completely dependent on one another.
+For a binomially distributed variable
+$Y \sim B(n,p)$, 
+$E[Y] = np$ and
+$Var[Y] = np(1-p)$.
+
+In other words, when we provide a log-odds for the effect size, we are
+providing both an estimate of the mean and the variance of $Y$.
+Importantly, note that for any given $n$, the variance of $Y$ is highest if
+$p=0.5$, and it is in general high for values near $p=.5$ (see figure below for
+n=1, i.e. under the Bernoulli distribution). Since the effect we are estimating
+corresponds to $p \approx .54$ (i.e., close to .5), the variance will be quite high.
+
+```{r}
+# For n=1:
+p <- seq(0, 1, .02)
+Var <- p*(1-p)
+plot(p, Var, main = "Variance of Y ~ B(1, p)")
+```
+
+
+In conclusion, a small effect in log-odds also has large associated variance.
+This explains why we would need very high N to "plan for compelling evidence"
+given the effect size in the original study.
+
+
+
+BFDA using a *minimum effect size of interest* + prior based on original study
+============================
+
+We modify our BFDA in the following way:
+
+1) We set the expected effect size to a *minimum effect size of interest*, which
+we define independently of the estimates from the original data. We plan for a
+study that is able to find a small effect of, say, 0.5 log-odds (considered 
+"small" in the literature).
+2) We use as the `prior` argument the posterior distribution of the model 
+parameter of interest (the interaction/interference effect) based on our
+re-analysis of the original data.
+
+
+Simulate hypothetical studies under *minimum effect size* and prior based on original study
+-----------------------------
+
+```{r}
+# We use `type = "abtest"` for the binomial model. 
+# # Under alternative hypothesis H1
+# sim.H1_05 <- BFDA.sim(expected.ES = 0.5,  # minimum ES of interest
+#                       type = "abtest",
+#                       prior=list("normal", 
+#                                  list(prior.mean = mean(beta_post),
+#                                       prior.variance = var(beta_post))),
+#                       options.sample = list(effecttype = "logOR"),
+#                       n.min=60, n.max=300, stepsize = 20, boundary=Inf,
+#                       alternative="greater",
+#                       B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-08-14 13:57:04"
+# [1] "Simulation finished at 2019-08-14 14:09:03"
+# Duration: Time difference of 11.98412 mins
+
+# Save/load to/from disk:
+
+# write_rds(sim.H1_05, "sim_H1_05.rds")
+sim.H1_05 <- read_rds("sim_H1_05.rds")
+sim.H1_05
+```
+
+
+```{r}
+# # Under null hypothesis H0
+# sim.H0_05 <- BFDA.sim(expected.ES = 0,  # no effect
+#                       type = "abtest",
+#                       prior=list("normal",
+#                                  list(prior.mean = mean(beta_post),
+#                                       prior.variance = var(beta_post))),
+#                       options.sample = list(effecttype = "logOR"),
+#                       n.min=60, n.max=300, stepsize = 20, boundary=Inf,
+#                       alternative="greater",
+#                       B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-08-14 14:11:03"
+# [1] "Simulation finished at 2019-08-14 14:23:18"
+# Duration: Time difference of 12.24495 mins
+
+# Save/load to/from disk:
+
+# write_rds(sim.H0_05, "sim_H0_05.rds")
+sim.H0_05 <- read_rds("sim_H0_05.rds")
+sim.H0_05
+```
+
+
+Sequential design
+-----------------
+
+### Under H1
+
+```{r}
+BFDA.analyze(sim.H1_05, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+```{r}
+plot(sim.H1_05, n.min=60, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+```{r}
+BFDA.analyze(sim.H0_05, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+```{r}
+plot(sim.H0_05, n.min=60, boundary=c(1/6, 6))
+```
+
+
+Sequential design with reasonable max N (=140)
+-----------------
+
+### Under H1
+
+```{r}
+BFDA.analyze(sim.H1_05, design="sequential", n.min=60, n.max=140, boundary=6)
+```
+
+```{r}
+plot(sim.H1_05, n.min=60, n.max = 140, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+```{r}
+BFDA.analyze(sim.H0_05, design="sequential", n.min=60, n.max=140, boundary=6)
+```
+
+```{r}
+plot(sim.H0_05, n.min=60, n.max=140, boundary=c(1/6, 6))
+```
+
+
+
+Find N to achieve power = .80
+----------------
+
+The N necessary to achieve 80% power is way out there (not even on the map)!
+
+```{r}
+SSD(sim.H1_05, power=.80, boundary=c(1/6, 6))
+```
+
+
+Conclusion
+----------
+
+
+
+BFDA using a *minimum effect size of interest* + default prior
+============================
+
+Same as previous, but we use the default prior, i.e. a standard normal $N(0,1)$.
+
+
+Simulate hypothetical studies under *minimum effect size* and prior based on original study
+-----------------------------
+
+```{r}
+# We use `type = "abtest"` for the binomial model. 
+# # Under alternative hypothesis H1
+# sim.H1_05_defprior <- BFDA.sim(expected.ES = 0.5,  # minimum ES of interest
+#                       type = "abtest",
+#                       prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#                       options.sample = list(effecttype = "logOR"),
+#                       n.min=60, n.max=300, stepsize = 20, boundary=Inf,
+#                       alternative="greater",
+#                       B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-08-14 14:34:42"
+# [1] "Simulation finished at 2019-08-14 14:45:50"
+# Duration: Time difference of 11.13938 mins
+
+# Save/load to/from disk:
+
+# write_rds(sim.H1_05_defprior, "sim_H1_05_defprior.rds")
+sim.H1_05_defprior <- read_rds("sim_H1_05_defprior.rds")
+sim.H1_05_defprior
+```
+
+
+```{r}
+# # Under null hypothesis H0
+# sim.H0_05_defprior <- BFDA.sim(expected.ES = 0,  # no effect
+#                       type = "abtest",
+#                       prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#                       options.sample = list(effecttype = "logOR"),
+#                       n.min=60, n.max=300, stepsize = 20, boundary=Inf,
+#                       alternative="greater",
+#                       B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-08-14 14:46:53"
+# [1] "Simulation finished at 2019-08-14 14:57:53"
+# Duration: Time difference of 10.9876 mins
+
+# Save/load to/from disk:
+
+# write_rds(sim.H0_05_defprior, "sim_H0_05_defprior.rds")
+sim.H0_05_defprior <- read_rds("sim_H0_05_defprior.rds")
+sim.H0_05_defprior
+```
+
+
+Sequential design
+-----------------
+
+### Under H1
+
+```{r}
+BFDA.analyze(sim.H1_05_defprior, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+```{r}
+plot(sim.H1_05_defprior, n.min=60, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+```{r}
+BFDA.analyze(sim.H0_05_defprior, design="sequential", n.min=60, n.max=300, boundary=6)
+```
+
+```{r}
+plot(sim.H0_05_defprior, n.min=60, boundary=c(1/6, 6))
+```
+
+
+Sequential design with reasonable max N (=140)
+-----------------
+
+### Under H1
+
+```{r}
+BFDA.analyze(sim.H1_05_defprior, design="sequential", n.min=60, n.max=140, boundary=6)
+```
+
+```{r}
+plot(sim.H1_05_defprior, n.min=60, n.max=140, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+```{r}
+BFDA.analyze(sim.H0_05_defprior, design="sequential", n.min=60, n.max=140, boundary=6)
+```
+
+```{r}
+plot(sim.H0_05_defprior, n.min=60, n.max=140, boundary=c(1/6, 6))
+```
+
+
+
+Find N to achieve power = .80
+----------------
+
+The N necessary to achieve 80% power is way out there (not even on the map)!
+
+```{r}
+SSD(sim.H1_05_defprior, power=.80, boundary=c(1/6, 6))
+```
+
+
+Conclusion
+----------
+
+
+Session info
+============
+
+```{r}
+sessionInfo()
+```
+
