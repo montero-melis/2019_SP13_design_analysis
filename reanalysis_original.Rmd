@@ -216,8 +216,8 @@ see Bürkner 2017, p.7, fn 3.)
 
 ```{r}
 # To save time the fitted model has been saved to file
-# saveRDS(bfm_binom, "bayes_glmm_default.rds")
-bfm_binom <- readRDS("bayes_glmm_default.rds")
+# saveRDS(bfm_binom, "sims_etc/bayes_glmm_default.rds")
+bfm_binom <- readRDS("sims_etc/bayes_glmm_default.rds")
 ```
 
 
@@ -266,7 +266,102 @@ analysis in our replication.
 
 ```{r}
 beta_posterior <- posterior_samples(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg")
-write_csv(beta_posterior, "beta_posterior.csv")
+write_csv(beta_posterior, "sims_etc/beta_posterior.csv")
+```
+
+
+Is the effect we find in the sample robust? Apply bootstrapping!
+============================
+
+Markus suggested that the apparently robust interaction effect observed in the
+original data might hinge on just a few participants who are driving the effect. 
+One way of assessing this is through bootstrapping.
+
+Bootstrap procedure:
+
+1. Take a random sample of size 15 with replacement from the 15 participants in
+the original study.
+2. Analyze the data set with the *lme4* model above (faster than *brms*).
+3. Extract the estimates for the coefficient and its SE.
+4. Repeat steps 1--3 a large number of times (e.g., 5000)
+
+
+Basic function:
+
+```{r}
+# Function for a single run:
+mybootstr <- function(df = d) {
+
+  # Create new data set by resampling Subjects with replacement
+  # (NB: Relies on dplyr functions, see in particular nest())
+  newd <- df %>%
+    nest(-subject) %>%
+    sample_n(15, replace = TRUE) %>%
+    mutate(subject = 1 : 15) %>%  # assign each resampled S a unique ID
+    unnest()
+
+  # contrast coding for movement and wordtype
+  newd$movement <- factor(newd$movement)
+  contrasts(newd$movement) <- contr.sum(2)
+  newd$word_type <- factor(newd$word_type)
+  contrasts(newd$word_type) <- contr.sum(2)
+
+  # Fit glmer model
+  fm_binom <- glmer(cbind(errors, n - errors) ~ 1 + movement * word_type +
+                      (1 | subject),
+                    data = newd, family = "binomial")
+
+  # extract point estimate and SE for interaction coefficient of interest, based
+  # on https://r.789695.n4.nabble.com/extracting-coefficients-from-lmer-td791247.html
+  beta <- fixef(fm_binom)[4]
+  SE   <- sqrt(diag(vcov(fm_binom, useScale = FALSE))[4])
+  zval <- beta / SE
+  # out
+  out <- c(beta, SE, zval)
+  names(out) <- c("beta", "SE", "zval")
+  out
+}
+# Run once
+mybootstr()
+# Using replicate
+data.frame(t(replicate(4, mybootstr())))
+```
+
+Run this function a large number of times and save results:
+
+```{r}
+# # Run and save to disk
+# bootstr_res <- data.frame(t(replicate(5000, mybootstr())))
+# write_csv(bootstr_res, "sims_etc/bootstrap_results.csv")
+```
+
+Once run, read from disk:
+
+```{r}
+# Read from disk
+bootstr_res <- read_csv("sims_etc/bootstrap_results.csv")
+str(bootstr_res)
+head(bootstr_res)
+```
+
+
+Plot results:
+
+```{r}
+ggplot(bootstr_res, aes(x = beta)) +
+  geom_density() + xlim(0, 0.3)
+ggplot(bootstr_res, aes(x = SE)) +
+  geom_density()
+ggplot(bootstr_res, aes(x = zval)) +
+  geom_density() + xlim(1, 10) +
+  geom_vline(xintercept = 1.96, linetype = "dashed")
+```
+
+
+Proportion of runs in which $z < 1.96$:
+
+```{r}
+with(bootstr_res, sum(zval < 1.96) / length(zval))
 ```
 
 
