@@ -365,7 +365,7 @@ summary {
 
 <h1 class="title toc-ignore">BF design analysis for SP13 replication</h1>
 <h4 class="author"><a href="https://www.mpi.nl/people/montero-melis-guillermo">Guillermo Montero-Melis</a></h4>
-<h4 class="date">14/08/2019</h4>
+<h4 class="date">15/08/2019</h4>
 
 </div>
 
@@ -417,12 +417,12 @@ summary {
 <h1><span class="header-section-number">1</span> Setup workspace</h1>
 <pre class="r"><code>library(&quot;knitr&quot;)
 library(&quot;tidyverse&quot;)  # ggplot2, dplyr, readr, purrr, etc</code></pre>
-<pre><code>## -- Attaching packages ------------------------------------------------------------------------------------------------------------- tidyverse 1.2.1 --</code></pre>
+<pre><code>## -- Attaching packages ------------------------------------------------------- tidyverse 1.2.1 --</code></pre>
 <pre><code>## v ggplot2 3.2.0     v purrr   0.3.2
 ## v tibble  2.1.3     v dplyr   0.8.3
 ## v tidyr   0.8.3     v stringr 1.4.0
 ## v readr   1.3.1     v forcats 0.4.0</code></pre>
-<pre><code>## -- Conflicts ---------------------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
+<pre><code>## -- Conflicts ---------------------------------------------------------- tidyverse_conflicts() --
 ## x dplyr::filter() masks stats::filter()
 ## x dplyr::lag()    masks stats::lag()</code></pre>
 <pre class="r"><code>library(&quot;boot&quot;)       # for inv.logit()
@@ -445,7 +445,7 @@ library(&quot;BFDA&quot;)</code></pre>
 ##     SSD</code></pre>
 <p>Load posterior estimates from <code>brms</code> model fitted to original data:</p>
 <pre class="r"><code># read and convert to vector
-beta_post &lt;- read_csv(&quot;beta_posterior.csv&quot;) %&gt;%
+beta_post &lt;- read_csv(&quot;sims_etc/beta_posterior.csv&quot;) %&gt;%
   pull(1)</code></pre>
 <pre><code>## Parsed with column specification:
 ## cols(
@@ -466,8 +466,8 @@ beta_post &lt;- read_csv(&quot;beta_posterior.csv&quot;) %&gt;%
 #                    verbose=TRUE, cores=1, stepsize = 20)
 
 # Save/load to/from disk
-# write_rds(sim.H1, &quot;sim_H1.rds&quot;)
-sim.H1 &lt;- read_rds(&quot;sim_H1.rds&quot;)
+# write_rds(sim.H1, &quot;sims_etc/sim_H1.rds&quot;)
+sim.H1 &lt;- read_rds(&quot;sims_etc/sim_H1.rds&quot;)
 sim.H1</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis
@@ -489,8 +489,8 @@ sim.H1</code></pre>
 #                    verbose=TRUE, cores=1, stepsize = 20)
 
 # Save/load to/from disk
-# write_rds(sim.H0, &quot;sim_H0.rds&quot;)
-sim.H0 &lt;- read_rds(&quot;sim_H0.rds&quot;)
+# write_rds(sim.H0, &quot;sims_etc/sim_H0.rds&quot;)
+sim.H0 &lt;- read_rds(&quot;sims_etc/sim_H0.rds&quot;)
 sim.H0</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis
@@ -634,8 +634,8 @@ plot(p, Var, main = &quot;Variance of Y ~ B(1, p)&quot;)</code></pre>
 
 # Save/load to/from disk:
 
-# write_rds(sim.H1_05, &quot;sim_H1_05.rds&quot;)
-sim.H1_05 &lt;- read_rds(&quot;sim_H1_05.rds&quot;)
+# write_rds(sim.H1_05, &quot;sims_etc/sim_H1_05.rds&quot;)
+sim.H1_05 &lt;- read_rds(&quot;sims_etc/sim_H1_05.rds&quot;)
 sim.H1_05</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis
@@ -665,8 +665,8 @@ sim.H1_05</code></pre>
 
 # Save/load to/from disk:
 
-# write_rds(sim.H0_05, &quot;sim_H0_05.rds&quot;)
-sim.H0_05 &lt;- read_rds(&quot;sim_H0_05.rds&quot;)
+# write_rds(sim.H0_05, &quot;sims_etc/sim_H0_05.rds&quot;)
+sim.H0_05 &lt;- read_rds(&quot;sims_etc/sim_H0_05.rds&quot;)
 sim.H0_05</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis
@@ -819,8 +819,8 @@ sim.H0_05</code></pre>
 
 # Save/load to/from disk:
 
-# write_rds(sim.H1_05_defprior, &quot;sim_H1_05_defprior.rds&quot;)
-sim.H1_05_defprior &lt;- read_rds(&quot;sim_H1_05_defprior.rds&quot;)
+# write_rds(sim.H1_05_defprior, &quot;sims_etc/sim_H1_05_defprior.rds&quot;)
+sim.H1_05_defprior &lt;- read_rds(&quot;sims_etc/sim_H1_05_defprior.rds&quot;)
 sim.H1_05_defprior</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis
@@ -848,8 +848,8 @@ sim.H1_05_defprior</code></pre>
 
 # Save/load to/from disk:
 
-# write_rds(sim.H0_05_defprior, &quot;sim_H0_05_defprior.rds&quot;)
-sim.H0_05_defprior &lt;- read_rds(&quot;sim_H0_05_defprior.rds&quot;)
+# write_rds(sim.H0_05_defprior, &quot;sims_etc/sim_H0_05_defprior.rds&quot;)
+sim.H0_05_defprior &lt;- read_rds(&quot;sims_etc/sim_H0_05_defprior.rds&quot;)
 sim.H0_05_defprior</code></pre>
 <pre><code>## 
 ## Bayes Factor Design Analysis

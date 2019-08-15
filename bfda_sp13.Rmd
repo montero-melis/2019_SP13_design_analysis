@@ -28,7 +28,7 @@ Load posterior estimates from `brms` model fitted to original data:
 
 ```{r}
 # read and convert to vector
-beta_post <- read_csv("beta_posterior.csv") %>%
+beta_post <- read_csv("sims_etc/beta_posterior.csv") %>%
   pull(1)
 ```
 
@@ -55,8 +55,8 @@ from our `brms` model fit to the original data (see `reanalysis_original.Rmd`).
 #                    verbose=TRUE, cores=1, stepsize = 20)
 
 # Save/load to/from disk
-# write_rds(sim.H1, "sim_H1.rds")
-sim.H1 <- read_rds("sim_H1.rds")
+# write_rds(sim.H1, "sims_etc/sim_H1.rds")
+sim.H1 <- read_rds("sims_etc/sim_H1.rds")
 sim.H1
 ```
 
@@ -70,8 +70,8 @@ sim.H1
 #                    verbose=TRUE, cores=1, stepsize = 20)
 
 # Save/load to/from disk
-# write_rds(sim.H0, "sim_H0.rds")
-sim.H0 <- read_rds("sim_H0.rds")
+# write_rds(sim.H0, "sims_etc/sim_H0.rds")
+sim.H0 <- read_rds("sims_etc/sim_H0.rds")
 sim.H0
 ```
 
@@ -230,8 +230,8 @@ Simulate hypothetical studies under *minimum effect size* and prior based on ori
 
 # Save/load to/from disk:
 
-# write_rds(sim.H1_05, "sim_H1_05.rds")
-sim.H1_05 <- read_rds("sim_H1_05.rds")
+# write_rds(sim.H1_05, "sims_etc/sim_H1_05.rds")
+sim.H1_05 <- read_rds("sims_etc/sim_H1_05.rds")
 sim.H1_05
 ```
 
@@ -254,8 +254,8 @@ sim.H1_05
 
 # Save/load to/from disk:
 
-# write_rds(sim.H0_05, "sim_H0_05.rds")
-sim.H0_05 <- read_rds("sim_H0_05.rds")
+# write_rds(sim.H0_05, "sims_etc/sim_H0_05.rds")
+sim.H0_05 <- read_rds("sims_etc/sim_H0_05.rds")
 sim.H0_05
 ```
 
@@ -352,8 +352,8 @@ Simulate hypothetical studies under *minimum effect size* and prior based on ori
 
 # Save/load to/from disk:
 
-# write_rds(sim.H1_05_defprior, "sim_H1_05_defprior.rds")
-sim.H1_05_defprior <- read_rds("sim_H1_05_defprior.rds")
+# write_rds(sim.H1_05_defprior, "sims_etc/sim_H1_05_defprior.rds")
+sim.H1_05_defprior <- read_rds("sims_etc/sim_H1_05_defprior.rds")
 sim.H1_05_defprior
 ```
 
@@ -374,8 +374,8 @@ sim.H1_05_defprior
 
 # Save/load to/from disk:
 
-# write_rds(sim.H0_05_defprior, "sim_H0_05_defprior.rds")
-sim.H0_05_defprior <- read_rds("sim_H0_05_defprior.rds")
+# write_rds(sim.H0_05_defprior, "sims_etc/sim_H0_05_defprior.rds")
+sim.H0_05_defprior <- read_rds("sims_etc/sim_H0_05_defprior.rds")
 sim.H0_05_defprior
 ```
 
