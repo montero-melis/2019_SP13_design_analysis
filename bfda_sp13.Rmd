@@ -714,6 +714,221 @@ Conclusion
 
 
 
+Simulations for letter to Cortex editors
+============================
+
+We run simulations with much higher N to get at what N we would actually need
+to plan for compelling evidence.
+
+We run two simulations, both with `expected.ES` equal to the posterior from our
+re-analysis of the SP13 data. 
+
+Only the `prior` argument varies, with the following two options:
+
+1. A non-informative default prior (to conince a "skeptical audience", see SW18).
+2. A prior that is equal to the posterior distribution based on original results.
+
+
+Simulate hypothetical studies
+-----------------------------
+
+For each of the settings for prior, simulate data under H1 and H0 and save to
+disk:
+
+```{r}
+# ## Non-informative (default) prior:
+# 
+# # Under alternative hypothesis H1
+# sim.H1_origES_defPrior <- BFDA.sim(
+#   expected.ES = beta_post,  # posterior of original becomes prior
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:05:21"
+# # [1] "Simulation finished at 2019-08-16 10:13:21"
+# # Duration: Time difference of 8.008386 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_origES_defPrior, "sims_etc/sim_H1_origES_defPrior.rds")
+# 
+# # Under null hypothesis H0
+# sim.H0_origES_defPrior <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:13:22"
+# # [1] "Simulation finished at 2019-08-16 10:21:19"
+# # Duration: Time difference of 7.956102 mins
+# 
+# # Save to disk:
+# write_rds(sim.H0_origES_defPrior, "sims_etc/sim_H0_origES_defPrior.rds")
+# 
+# 
+# ## Informed prior (based on results in SP13):
+# 
+# # Under alternative hypothesis H1
+# sim.H1_origES_origPrior <- BFDA.sim(
+#   expected.ES = beta_post,  # posterior of original becomes prior
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = mean(beta_post), prior.variance = var(beta_post))),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:21:19"
+# # [1] "Simulation finished at 2019-08-16 10:29:42"
+# # Duration: Time difference of 8.379531 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_origES_origPrior, "sims_etc/sim_H1_origES_origPrior.rds")
+# 
+# # Under null hypothesis H0
+# sim.H0_origES_origPrior <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = mean(beta_post), prior.variance = var(beta_post))),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:29:43"
+# # [1] "Simulation finished at 2019-08-16 10:38:06"
+# # Duration: Time difference of 8.385818 mins
+# 
+# # Save to disk:
+# write_rds(sim.H0_origES_origPrior, "sims_etc/sim_H0_origES_origPrior.rds")
+```
+
+Load from disk
+
+```{r}
+# Load from disk
+sim.H1_origES_defPrior <- read_rds("sims_etc/sim_H1_origES_defPrior.rds")
+sim.H1_origES_defPrior
+
+sim.H0_origES_defPrior <- read_rds("sims_etc/sim_H0_origES_defPrior.rds")
+sim.H0_origES_defPrior
+
+sim.H1_origES_origPrior <- read_rds("sims_etc/sim_H1_origES_origPrior.rds")
+sim.H1_origES_origPrior
+
+sim.H0_origES_origPrior <- read_rds("sims_etc/sim_H0_origES_origPrior.rds")
+sim.H0_origES_origPrior
+```
+
+
+
+
+Sequential design
+-----------------
+
+### Under H1
+
+Default prior:
+
+```{r}
+BFDA.analyze(sim.H1_origES_defPrior, design="sequential", n.min=100, n.max=3000, boundary=6)
+```
+
+Informed prior:
+
+```{r}
+BFDA.analyze(sim.H1_origES_origPrior, design="sequential", n.min=100, n.max=3000, boundary=6)
+```
+
+
+Default:
+
+```{r}
+plot(sim.H1_origES_defPrior, n.min=100, boundary=c(1/6, 6))
+```
+
+Informed:
+
+```{r}
+plot(sim.H1_origES_origPrior, n.min=100, boundary=c(1/6, 6))
+```
+
+
+### Under H0
+
+Default:
+
+```{r}
+BFDA.analyze(sim.H0_origES_defPrior, design="sequential", n.min=100, n.max=3000, boundary=6)
+```
+
+Informed
+
+```{r}
+BFDA.analyze(sim.H0_origES_origPrior, design="sequential", n.min=100, n.max=3000, boundary=6)
+```
+
+Default:
+
+```{r}
+plot(sim.H0_origES_defPrior, n.min=100, boundary=c(1/6, 6))
+```
+
+Informed:
+
+```{r}
+plot(sim.H0_origES_origPrior, n.min=100, boundary=c(1/6, 6))
+```
+
+
+Find N to achieve power = .80
+----------------
+
+### For H1
+
+With default prior:
+
+```{r}
+SSD(sim.H1_origES_defPrior, power=.80, boundary=c(1/6, 6))
+```
+
+With informed prior:
+
+```{r}
+SSD(sim.H1_origES_origPrior, power=.80, boundary=c(1/6, 6))
+```
+
+
+### For H0
+
+With default prior:
+
+```{r}
+SSD(sim.H0_origES_defPrior, power=.80, boundary=c(1/6, 6))
+```
+
+With informed prior:
+
+```{r}
+SSD(sim.H0_origES_origPrior, power=.80, boundary=c(1/6, 6))
+```
+
+
+Conclusion
+----------
+
+
+
+
+
+
 Session info
 ============
 
