@@ -87,6 +87,48 @@ consistency by subjects, i.e. the slopes of the thin lines mostly go in the same
 direction as the slope of the thicker lines.
 
 
+Replicate originally reported analysis with ANOVAs
+==================================================
+
+
+## Data summaries
+
+First, let's see if our data summaries look like theirs reported in Table 2
+(SP13, p.226):
+
+```{r}
+d_all_conds %>%
+  group_by(movement, word_type) %>%
+  summarise(
+    M  = round(mean(errors), 1),
+    SD = round(sd(errors), 2)
+  )
+```
+
+Yes, they do!
+
+
+### Anova on full 4 (conditions) x 2 (word categories) design:
+
+```{r}
+# Following this post:
+# https://www.r-bloggers.com/two-way-anova-with-repeated-measures/
+aov_orig_allconds <- aov(
+  errors ~ movement * word_type +
+    Error(subject / (movement * word_type)),
+  data = d_all_conds)
+summary(aov_orig_allconds)
+```
+
+
+```{r}
+aov_orig <- aov(errors ~ movement * word_type +
+                  Error(subject / (movement * word_type)),
+                data = d)
+summary(aov_orig)
+```
+
+
 
 Treat data as coming from a binomial distribution, but what is $n$?
 ======================================================
