@@ -23,6 +23,8 @@ library("lme4")
 library("brms")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("boot")       # for inv.logit()
+library("DescTools")  # EtaSq()
+# library("sjstats")    # eta_sq()
 ```
 
 
@@ -33,22 +35,23 @@ Original data set
 
 ```{r}
 # Load data
-d_all_conds <- read_csv("orig_study/SP13_orig-data_total-errors_long-format.csv")
+d_allconds <- read_csv("orig_study/SP13_orig-data_total-errors_long-format.csv")
+d_allconds$subject <- factor(d_allconds$subject)
 ```
 
 ```{r}
-kable(head(d_all_conds))
-str(d_all_conds)
+kable(head(d_allconds))
+str(d_allconds)
 ```
 
 - The data show the total number of errors, adding all three types of errors:
 omissions, replacements, and transpositions.
 - This data set contains the data for all four movement conditions:
-`r unique(d_all_conds$movement)`. However, we are only interested in
+`r unique(d_allconds$movement)`. However, we are only interested in
 the arm/leg movement conditions, so we subset the data:
 
 ```{r}
-d <- d_all_conds %>% filter(movement %in% c("arm_paradi", "leg_paradi"))
+d <- d_allconds %>% filter(movement %in% c("arm_paradi", "leg_paradi"))
 kable(head(d))
 str(d)
 ```
@@ -97,7 +100,7 @@ First, let's see if our data summaries look like theirs reported in Table 2
 (SP13, p.226):
 
 ```{r}
-d_all_conds %>%
+d_allconds %>%
   group_by(movement, word_type) %>%
   summarise(
     M  = round(mean(errors), 1),
@@ -108,7 +111,9 @@ d_all_conds %>%
 Yes, they do!
 
 
-### Anova on full 4 (conditions) x 2 (word categories) design:
+## Anova on full 4 (conditions) x 2 (word categories) design:
+
+Can we replicate the results reported in SP13 (p.225)?
 
 ```{r}
 # Following this post:
@@ -116,10 +121,19 @@ Yes, they do!
 aov_orig_allconds <- aov(
   errors ~ movement * word_type +
     Error(subject / (movement * word_type)),
-  data = d_all_conds)
+  data = d_allconds)
 summary(aov_orig_allconds)
 ```
 
+Yes, pretty much: The F-values are identical, but I don't know how they computed
+MSE. Their numbers don't line up with the current results.
+
+
+
+## Anova on critical 2x2 design
+
+Most importantly, can we replicate the critical results
+"directly addressing the main hypothesis motivating this study" (SP13, p.226)?
 
 ```{r}
 aov_orig <- aov(errors ~ movement * word_type +
@@ -128,6 +142,53 @@ aov_orig <- aov(errors ~ movement * word_type +
 summary(aov_orig)
 ```
 
+Again, pretty much yes: The F-values, degrees of freedom and p-values are again
+identical. Still their reported MSE differs from what we obtained above.
+
+
+
+## Computing effect size for critical interaction in the ANOVA
+
+The authors report Cohen's $d = 1.25$ as the effect size for the critical
+interaction (p.226). However, it is not clear how they arrived at this figure:
+
+### Eta squared
+
+Eta squared is the most commonly used measure of effect size for ANOVAs: It 
+"measures the proportion of the total variance in a dependent variable that is
+associated with [...] an independent variable" (Richardson, 2011, p. 135).
+For an example calculation, see 
+[here](https://psychohawks.wordpress.com/2010/10/31/effect-size-for-analysis-of-variables-anova/).
+
+```{r}
+DescTools::EtaSq(aov_orig, type = 1)
+# sjstats::eta_sq(aov_orig)  # yields same results
+```
+
+
+### Where does the originally reported Cohen's $d$ come from?
+
+As mentioned above, SP13 report an effect size for the critical interaction of
+Cohen's $d = 1.25$ (SP13, p. 226).
+Even though the results from the ANOVA above mostly line up with SP13's results,
+I don't know how this figure for $d$ was obtained. 
+
+What I've tried:
+
+- [This online calculator](https://www.psychometrica.de/effect_size.html)
+converts between different effect size measures (see section 13). When plugging
+in $\eta^2 = 0.04$, the corresponding effect size is $d = 0.41$, which is very
+far off from the figure in SP13!
+- [This IBM support website](https://www-01.ibm.com/support/docview.wss?uid=swg21476421)
+cites formulae to convert between *partial* Eta-squared, Cohen's $f$, and
+Cohen's $d$: 
+\[
+f = \sqrt{ \frac{\eta^2}{1 - \eta^2} };
+d = 2*f
+\]
+This formular yields the same value as above ($d=0.41$) if the `eta.sq` value
+is plugged in. If we use the `eta.sq.part` value instead, it seems completely
+off ($d$ close to 2).
 
 
 Treat data as coming from a binomial distribution, but what is $n$?
