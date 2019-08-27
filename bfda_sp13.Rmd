@@ -724,7 +724,7 @@ re-analysis of the SP13 data.
 
 Only the `prior` argument varies, with the following two options:
 
-1. A non-informative default prior (to conince a "skeptical audience", see SW18).
+1. A non-informative default prior (to convince a "skeptical audience", see SW18).
 2. A prior that is equal to the posterior distribution based on original results.
 
 
