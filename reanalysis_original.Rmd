@@ -142,7 +142,7 @@ aov_orig <- aov(errors ~ movement * word_type +
 summary(aov_orig)
 ```
 
-Again, pretty much yes: The F-values, degrees of freedom and p-values are again
+Again, pretty much yes: The F-values, degrees of freedom and p-values are
 identical. Still their reported MSE differs from what we obtained above.
 
 
@@ -150,7 +150,7 @@ identical. Still their reported MSE differs from what we obtained above.
 ## Computing effect size for critical interaction in the ANOVA
 
 The authors report Cohen's $d = 1.25$ as the effect size for the critical
-interaction (p.226). However, it is not clear how they arrived at this figure:
+interaction (p.226). However, it is not clear how they arrived at this figure.
 
 ### Eta squared
 
@@ -335,8 +335,8 @@ The 95% credible interval for the critical interaction
 $[`r round(fixef(bfm_binom)[4,3], 2)`, `r round(fixef(bfm_binom)[4,4], 2)`]$
 clearly contains the point estimate from the *lme4* model, and the two are 
 identical
-(*brms*: $`r round(fixef(bfm_binom)[4,1], 4)`;
-*lme4*: `r round(fixef(fm_binom)[4], 4)`$).
+(*brms*: $`r round(fixef(bfm_binom)[4,1], 3)`$;
+*lme4*: $`r round(fixef(fm_binom)[4], 3)`$).
 Note that the estimated SEM also are quite comparable.
 
 *brms* allows us to perform "non-linear hypothesis testing". Let us test the
@@ -347,7 +347,7 @@ interference effect):
 hypothesis(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg > 0")
 ```
 
-The evidence ratio for an interference effect is overwhelming.
+The evidence ratio that there exists an interference effect is overwhelming.
 
 We can also plot the posterior distribution of the model estimates:
 
@@ -357,7 +357,7 @@ plot(bfm_binom)
 
 
 
-Use posterior distribution of interaction coefficient as effect size prior for BFDA
+Save posterior distribution of interaction coefficient to use as effect size prior for BFDA
 ============================================
 
 *brms* has a `posterior_samples(x, pars)` function to get posterior traces for
@@ -410,9 +410,10 @@ mybootstr <- function(df = d) {
   contrasts(newd$word_type) <- contr.sum(2)
 
   # Fit glmer model
-  fm_binom <- glmer(cbind(errors, n - errors) ~ 1 + movement * word_type +
-                      (1 | subject),
-                    data = newd, family = "binomial")
+  fm_binom <- glmer(
+    cbind(errors, n - errors) ~ 1 + movement * word_type + (1 | subject),
+    data = newd, family = "binomial"
+    )
 
   # extract point estimate and SE for interaction coefficient of interest, based
   # on https://r.789695.n4.nabble.com/extracting-coefficients-from-lmer-td791247.html
