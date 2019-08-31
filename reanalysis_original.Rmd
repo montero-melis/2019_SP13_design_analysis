@@ -24,6 +24,7 @@ library("brms")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("boot")       # for inv.logit()
 library("DescTools")  # EtaSq()
+library("lsr")        # cohensD()
 # library("sjstats")    # eta_sq()
 ```
 
@@ -189,6 +190,51 @@ d = 2*f
 This formular yields the same value as above ($d=0.41$) if the `eta.sq` value
 is plugged in. If we use the `eta.sq.part` value instead, it seems completely
 off ($d$ close to 2).
+
+
+### Could it be that the *d* value comes from a t-test?
+
+What if we compare the average difference scores corresponding to the 
+interaction effect, i.e. we compare for each subject the average number of
+errors when effector and word type coincide (arm-arm or leg-leg) and when they
+differ (arm-leg or leg-arm):
+
+```{r}
+d$eff_word <- ifelse(substr(d$movement,1,3) == d$word_type, "same", "diff")
+head(d, 4)
+d_interact <- d %>% 
+  group_by(subject, eff_word) %>%
+  summarise(errors = mean(errors))
+head(d_interact)
+```
+
+```{r}
+ggplot(d_interact, aes(x = eff_word, y = errors)) +
+  geom_jitter(height = 0, width = .05, alpha = .5) +
+  geom_line(aes(group = subject), alpha = .5) +
+  stat_summary(fun.y = mean, geom = "point", size = 4,
+               position = position_dodge(width = .2)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.2, size = 2,
+               position = position_dodge(width = .2)) +
+  xlab("Effector-Word type")
+```
+
+```{r}
+d_4ttest <- spread(d_interact, eff_word, errors)
+head(d_4ttest, 3)
+with(d_4ttest, t.test(diff, same, paired = TRUE))
+```
+
+Cohen's $d$:
+
+```{r}
+# Following https://rcompanion.org/handbook/I_04.html
+with(d_4ttest, (mean(same) - mean(diff)) / sd(same - diff))
+# Note we get the same value using the lsr package
+with(d_4ttest, lsr::cohensD(diff, same, method = "paired"))
+```
+
+In conclusion: No, we can't reproduce their Cohen's $d$ in this way either.
 
 
 Treat data as coming from a binomial distribution, but what is $n$?
