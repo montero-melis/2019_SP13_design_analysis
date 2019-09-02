@@ -68,7 +68,11 @@ and informed priors are exactly those used in Stefan et al. (2019).
 Default prior
 ------------
 
+Run simulations:
+
 ```{r}
+# # Run simulations and save to disk:
+#
 # # Under alternative hypothesis H1 with ES d = 1.25
 # sim_H1_d_125_defPrior <- BFDA.sim(
 #   expected.ES = 1.25,  # as reported in SP13
@@ -102,87 +106,69 @@ Default prior
 # write_rds(sim_H0_d_125_defPrior, "sims_etc/sim_H0_d_125_defPrior.rds")
 ```
 
-
-
-
-
-
-Informative prior
-------------------------------
+Once run, load from disk:
 
 ```{r}
-# Under alternative hypothesis H1 with ES = 0.7 (NB: we increase n.max to see
-# how many participants we'd need)
-# sim.H1_ES07_defPrior_steps16 <- BFDA.sim(
-#   expected.ES = 0.7,
-#   type = "abtest",
-#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-#   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=400, stepsize = 16, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# 
-# # [1] "Simulation started at 2019-08-19 10:42:07"
-# # [1] "Simulation finished at 2019-08-19 11:00:06"
-# # Duration: Time difference of 17.9907 mins
-# 
-# # Save to disk:
-# write_rds(sim.H1_ES07_defPrior_steps16, "sims_etc/sim_H1_ES07_defPrior_steps16.rds")
-# 
-# 
-# 
-# # Under alternative hypothesis H1 with "medium" ES = 1.25 log-odds
-# sim.H1_13_defPrior_steps16 <- BFDA.sim(
-#   expected.ES = 1.25,
-#   type = "abtest",
-#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-#   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=240, stepsize = 16, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# 
-# # [1] "Simulation started at 2019-08-19 11:03:47"
-# # [1] "Simulation finished at 2019-08-19 11:13:27"
-# # Duration: Time difference of 9.655964 mins
-# 
-# # Save to disk:
-# write_rds(sim.H1_13_defPrior_steps16, "sims_etc/sim_H1_13_defPrior_steps16.rds")
-# 
-# 
-# # Under null hypothesis H0
-# sim.H0_defPrior_steps16 <- BFDA.sim(
-#   expected.ES = 0,  # no effect
-#   type = "abtest",
-#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-#   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=112, stepsize = 16, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# 
-# # [1] "Simulation started at 2019-08-18 11:36:03"
-# # [1] "Simulation finished at 2019-08-18 11:44:40"
-# # Duration: Time difference of 8.615529 mins
-# 
-# # Save to disk:
-# write_rds(sim.H0_defPrior_steps16, "sims_etc/sim_H0_defPrior_steps16.rds")
+# Load from disk
+sim_H1_d_125_defPrior <- read_rds("sims_etc/sim_H1_d_125_defPrior.rds")
+sim_H1_d_125_defPrior
+
+sim_H0_d_125_defPrior <- read_rds("sims_etc/sim_H0_d_125_defPrior.rds")
+sim_H0_d_125_defPrior
 ```
 
 
 
+Informed prior
+--------------
+
+Run simulations (only the `prior` argument changes):
 
 ```{r}
-# # Under null hypothesis H0
-# sim.H0 <- BFDA.sim(expected.ES = 0,  # no effect
-#                    type = "abtest",
-#                    # prior,  # unsure about this parameter!
-#                    n.min=60, n.max=300, alternative="greater", boundary=Inf, B=1000,
-#                    options.sample = list(effecttype = "logOR"),
-#                    verbose=TRUE, cores=1, stepsize = 20)
+# Run simulations and save to disk:
 
-# Save/load to/from disk
-# write_rds(sim.H0, "sims_etc/sim_H0.rds")
-sim.H0 <- read_rds("sims_etc/sim_H0.rds")
-sim.H0
+# Under alternative hypothesis H1 with ES d = 1.25
+sim_H1_d_125_infPrior <- BFDA.sim(
+  expected.ES = 1.25,  # as reported in SP13
+  type = "t.paired",
+  prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
+  n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+  alternative="greater",
+  B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-09-02 10:48:30"
+# [1] "Simulation finished at 2019-09-02 10:53:23"
+# Duration: Time difference of 4.876747 mins
+
+# Save to disk:
+write_rds(sim_H1_d_125_infPrior, "sims_etc/sim_H1_d_125_infPrior.rds")
+
+# Under null hypothesis H0
+sim_H0_d_125_infPrior <- BFDA.sim(
+  expected.ES = 0,  # under H0
+  type = "t.paired",
+  prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
+  n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+  alternative="greater",
+  B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-09-02 10:54:52"
+# [1] "Simulation finished at 2019-09-02 11:04:19"
+# Duration: Time difference of 9.448281 mins
+
+# Save to disk:
+write_rds(sim_H0_d_125_infPrior, "sims_etc/sim_H0_d_125_infPrior.rds")
+```
+
+Once run, load from disk:
+
+```{r}
+# Load from disk
+sim_H1_d_125_infPrior <- read_rds("sims_etc/sim_H1_d_125_infPrior.rds")
+sim_H1_d_125_infPrior
+
+sim_H0_d_125_infPrior <- read_rds("sims_etc/sim_H0_d_125_infPrior.rds")
+sim_H0_d_125_infPrior
 ```
 
 
