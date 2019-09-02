@@ -35,10 +35,12 @@ library("knitr")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("boot")       # for inv.logit()
 library("BFDA")
+library("sjPlot")     # tab_model()
+library("brms")
 ```
 
 Load posterior estimates from `brms` model fitted to original data (these come
-from our reanalysis of the original data, see `reanalysis_original.Rmd`):
+from our reanalysis of the original data, see `reanalysis_original.html`):
 
 ```{r}
 # read and convert to vector
@@ -118,6 +120,28 @@ sim_H0_d_125_defPrior
 ```
 
 
+```{r}
+# Wrapper function to display the results of the simulation:
+results_sim <- function(sim, pow = FALSE) {
+  print(BFDA.analyze(sim, design = "sequential", boundary = 6))
+  plot(sim, boundary=c(1/6, 6))
+  if (pow) { SSD(sim, power=.80, boundary=c(1/6, 6)) }
+}
+```
+
+### Under H1
+
+```{r}
+results_sim(sim_H1_d_125_defPrior, T)
+```
+
+### Under H0
+
+```{r}
+results_sim(sim_H0_d_125_defPrior, F)
+```
+
+
 
 Informed prior
 --------------
@@ -125,39 +149,39 @@ Informed prior
 Run simulations (only the `prior` argument changes):
 
 ```{r}
-# Run simulations and save to disk:
-
-# Under alternative hypothesis H1 with ES d = 1.25
-sim_H1_d_125_infPrior <- BFDA.sim(
-  expected.ES = 1.25,  # as reported in SP13
-  type = "t.paired",
-  prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
-  n.min=12, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=2000, verbose=TRUE, cores=1)
-
-# [1] "Simulation started at 2019-09-02 10:48:30"
-# [1] "Simulation finished at 2019-09-02 10:53:23"
-# Duration: Time difference of 4.876747 mins
-
-# Save to disk:
-write_rds(sim_H1_d_125_infPrior, "sims_etc/sim_H1_d_125_infPrior.rds")
-
-# Under null hypothesis H0
-sim_H0_d_125_infPrior <- BFDA.sim(
-  expected.ES = 0,  # under H0
-  type = "t.paired",
-  prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
-  n.min=12, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=2000, verbose=TRUE, cores=1)
-
-# [1] "Simulation started at 2019-09-02 10:54:52"
-# [1] "Simulation finished at 2019-09-02 11:04:19"
-# Duration: Time difference of 9.448281 mins
-
-# Save to disk:
-write_rds(sim_H0_d_125_infPrior, "sims_etc/sim_H0_d_125_infPrior.rds")
+# # Run simulations and save to disk:
+# 
+# # Under alternative hypothesis H1 with ES d = 1.25
+# sim_H1_d_125_infPrior <- BFDA.sim(
+#   expected.ES = 1.25,  # as reported in SP13
+#   type = "t.paired",
+#   prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 11:52:19"
+# # [1] "Simulation finished at 2019-09-02 12:04:47"
+# # Duration: Time difference of 12.46185 mins
+# 
+# # Save to disk:
+# write_rds(sim_H1_d_125_infPrior, "sims_etc/sim_H1_d_125_infPrior.rds")
+# 
+# # Under null hypothesis H0
+# sim_H0_d_125_infPrior <- BFDA.sim(
+#   expected.ES = 0,  # under H0
+#   type = "t.paired",
+#   prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 12:04:47"
+# # [1] "Simulation finished at 2019-09-02 12:21:36"
+# # Duration: Time difference of 16.81102 mins
+# 
+# # Save to disk:
+# write_rds(sim_H0_d_125_infPrior, "sims_etc/sim_H0_d_125_infPrior.rds")
 ```
 
 Once run, load from disk:
@@ -172,26 +196,365 @@ sim_H0_d_125_infPrior
 ```
 
 
+### Under H1
+
+```{r}
+results_sim(sim_H1_d_125_infPrior, T)
+```
+
+### Under H0
+
+```{r}
+results_sim(sim_H0_d_125_infPrior, F)
+```
+
+
+
 
 BFDA with analysis as in the original study and effect size from our re-analysis
 =======================================================================
 
+When we re-analyze the data for the critical interaction using a paired t-test,
+we obtain an effect size of Cohen's $d = 0.9$ (see `reanalysis_original.html`).
+
+Next we run simulations based on this effect size, again using a paired t-test.
+
+Note that we only run the simulations with the default (non-informative) priors
+so as to err on the conservartive side.
+
+```{r}
+# # Run simulations and save to disk:
+# 
+# # Under alternative hypothesis H1 with ES d = 1.25
+# sim_H1_d_09_defPrior <- BFDA.sim(
+#   expected.ES = 0.9,  # from our t-test reanalysis
+#   type = "t.paired",
+#   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 14:31:25"
+# # [1] "Simulation finished at 2019-09-02 14:36:22"
+# # Duration: Time difference of 4.960651 mins
+# 
+# # Save to disk:
+# write_rds(sim_H1_d_09_defPrior, "sims_etc/sim_H1_d_09_defPrior.rds")
+# 
+# # Under null hypothesis H0: The simulation here is the same as in
+# # sim_H0_d_125_defPrior, so no need to run it anew
+```
+
+Once run, load from disk:
+
+```{r}
+# Load from disk
+sim_H1_d_09_defPrior <- read_rds("sims_etc/sim_H1_d_09_defPrior.rds")
+sim_H1_d_09_defPrior
+```
+
+### Under H1
+
+```{r}
+results_sim(sim_H1_d_09_defPrior, T)
+```
 
 
 
 BFDA based on our improved re-analysis (binomial GLMM) of the original data
 =======================================================================
 
+Analyzing the error data using ANOVAs (or t-tests), as the authors did,
+violates some of the assumptions of those models.
+A better statistical analysis is to treat the errors participants made as
+arising from a binomial distribution. In order to additionally capture 
+subject-level variability, we can use Generalized Linear Mixed Models (GLMMs).
 
-Effect size as estimated from the data
+
+Re-analysis of the original data with a binomial GLMM
+----------------------------------------------------
+
+```{r}
+# The model is fitted in the script "reanalysis_original.Rmd"
+bfm_binom <- readRDS("sims_etc/bayes_glmm_default.rds")
+```
+
+In our re-analysis of the data, we used a Bayesian version of the binomial
+GLMM using the R package *brms*. The coefficients in such a model estimate
+effects in log-odds. The critical interaction of movement condition (hand vs
+leg movement) and word type (hand-related vs leg-related verb) also comes out
+as highly significant. 
+
+
+### Model summary
+
+This is the output of this model:
+
+```{r}
+summary(bfm_binom)
+```
+
+Or with a prettier (and simplified) layout (note effects are converted to 
+odd-ratios):
+
+```{r}
+tab_model(bfm_binom)
+```
+
+
+### Presence of an interaction effect
+
+*brms* allows us to test the hypothesis that the crucial interaction is larger
+than zero (i.e., that there is an interference effect):
+
+```{r}
+hypothesis(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg > 0")
+```
+
+The evidence ratio for the presence of an interference effect is overwhelming!
+
+
+### Effect size estimate
+
+However, in terms of effect size, the odds of making an error if effector and
+word type are the same (arm movement and arm word or leg movements and leg words),
+as opposed to when the two differ, is
+$e ^ {`r round(fixef(bfm_binom)[4], 2)`} =`r round(exp(fixef(bfm_binom)[4]), 2)`$.
+This is the *interference effect* of interest!
+
+**An effect of `r round(fixef(bfm_binom)[4], 2)` log-odds is *very* small**.
+For orientation, a common rule of thumb to interpret effect sizes in log-odds is
+as follows (see Chen et al., 2010):
+
+- Small effect  = 0.52 log-odds (= 1.68 OR)
+- Medium effect = 1.24 log-odds (= 3.47 OR)
+- Large effect  = 1.90 log-odds (= 6.71 OR)
+
+In contrast to the effect size reported by SP13 (Cohen's $d = 1.25$), which
+was substantially larger than "large", this re-analysis suggests that the
+effect was substantially smaller than "small".
+
+
+Effect size as estimated from our improved re-analysis of the data
 --------------------------------------
+
+If we take the output from our improved binomial GLMM re-analysis of the data as
+the prior for the BFDA, the estimated sample size we would need is huge.
+
+
+### Simulate hypothetical studies
+
+In this simulation,
+
+- We simulate a sequential design with minN = 100, maxN = 3000 and a step
+size of 100 participants.
+- We use as the effect size estimate (passed to the `expected.ES` argument)
+the posterior draw for the interaction effect from the Bayesian GLMM model;
+- We use a default (non-informative) prior as the analysis prior;
+- We run a AB-test (instead of a t-test), which is the appropriate test for
+effects measured on a (log-)odds ratio scale.
+
+
+Simulate data under H1 and H0 and save to disk.
+
+```{r}
+# ## Non-informative (default) prior:
+# 
+# # Under alternative hypothesis H1
+# sim.H1_origES_defPrior <- BFDA.sim(
+#   expected.ES = beta_post,  # posterior of original becomes prior
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:05:21"
+# # [1] "Simulation finished at 2019-08-16 10:13:21"
+# # Duration: Time difference of 8.008386 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_origES_defPrior, "sims_etc/sim_H1_origES_defPrior.rds")
+# 
+# # Under null hypothesis H0
+# sim.H0_origES_defPrior <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=1000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-16 10:13:22"
+# # [1] "Simulation finished at 2019-08-16 10:21:19"
+# # Duration: Time difference of 7.956102 mins
+# 
+# # Save to disk:
+# write_rds(sim.H0_origES_defPrior, "sims_etc/sim_H0_origES_defPrior.rds")
+```
+
+Load from disk
+
+```{r}
+# Load from disk
+sim.H1_origES_defPrior <- read_rds("sims_etc/sim_H1_origES_defPrior.rds")
+sim.H1_origES_defPrior
+
+sim.H0_origES_defPrior <- read_rds("sims_etc/sim_H0_origES_defPrior.rds")
+sim.H0_origES_defPrior
+```
+
+#### Under H1
+
+
+```{r}
+results_sim(sim.H1_origES_defPrior, T)
+```
+
+
+#### Under H0
+
+```{r}
+results_sim(sim.H1_origES_defPrior)
+```
+
+
+
+#### Conclusion
+
+These simulations indicate that not even an N as large as 3000 (!) participants
+would suffice to adhere to the journal guidelines to "guarantee data collection
+until the Bayes factor is at least 6 times in favour of the experimental
+hypothesis over the null hypothesis (or vice versa)."
 
 
 
 Effect size set to a small-to-medium effect
 -------------------------------------------
 
+Since adjusting our sample size to the estimates above is unfeasible, we opted
+for a design that would allow us to plan for compelling evidence if
 
+a) the effect size was "medium", i.e. 1.25 log-odds; and
+b) we don't commit to any strong prior in the Bayes factor analysis.
+
+```{r}
+# # Under alternative hypothesis H1 with medium ES = 1.25
+# sim_H1_LO_125_defPrior_steps12 <- BFDA.sim(
+#   expected.ES = 1.25,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=60, n.max=108, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 15:49:28"
+# # [1] "Simulation finished at 2019-09-02 15:53:31"
+# # Duration: Time difference of 4.046143 mins
+# 
+# # Save to disk:
+# write_rds(sim_H1_LO_125_defPrior_steps12, "sims_etc/sim_H1_LO_125_defPrior_steps12.rds")
+
+
+# Under alternative hypothesis H1 with small-to-medium ES = 0.9
+sim_H1_LO_09_defPrior_steps12 <- BFDA.sim(
+  expected.ES = 0.9,
+  type = "abtest",
+  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+  options.sample = list(effecttype = "logOR"),
+  n.min=60, n.max=108, stepsize = 12, boundary=Inf,
+  alternative="greater",
+  B=2000, verbose=TRUE, cores=1)
+
+# [1] "Simulation started at 2019-09-02 15:49:28"
+# [1] "Simulation finished at 2019-09-02 15:53:31"
+# Duration: Time difference of 4.046143 mins
+
+# Save to disk:
+write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
+
+
+
+
+
+# 
+# 
+# Under alternative hypothesis H1 with ES = 0.7 (NB: we increase n.max to see
+# how many participants we'd need)
+# sim.H1_ES07_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 0.7,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=400, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-19 10:42:07"
+# # [1] "Simulation finished at 2019-08-19 11:00:06"
+# # Duration: Time difference of 17.9907 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_ES07_defPrior_steps16, "sims_etc/sim_H1_ES07_defPrior_steps16.rds")
+# 
+# 
+# 
+# # Under alternative hypothesis H1 with "medium" ES = 1.25 log-odds
+# sim.H1_13_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 1.25,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=240, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-19 11:03:47"
+# # [1] "Simulation finished at 2019-08-19 11:13:27"
+# # Duration: Time difference of 9.655964 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_13_defPrior_steps16, "sims_etc/sim_H1_13_defPrior_steps16.rds")
+# 
+# 
+# # Under null hypothesis H0
+# sim.H0_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=112, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-18 11:36:03"
+# # [1] "Simulation finished at 2019-08-18 11:44:40"
+# # Duration: Time difference of 8.615529 mins
+# 
+# # Save to disk:
+# write_rds(sim.H0_defPrior_steps16, "sims_etc/sim_H0_defPrior_steps16.rds")
+```
+
+Load from disk
+
+```{r}
+# Load from disk
+sim.H1_ES05_defPrior_steps16 <- read_rds("sims_etc/sim_H1_ES05_defPrior_steps16.rds")
+sim.H1_ES05_defPrior_steps16
+
+sim.H1_ES07_defPrior_steps16 <- read_rds("sims_etc/sim_H1_ES07_defPrior_steps16.rds")
+sim.H1_ES07_defPrior_steps16
+
+sim.H1_13_defPrior_steps16 <- read_rds("sims_etc/sim_H1_13_defPrior_steps16.rds")
+sim.H1_13_defPrior_steps16
+
+
+sim.H0_defPrior_steps16 <- read_rds("sims_etc/sim_H0_defPrior_steps16.rds")
+sim.H0_defPrior_steps16
+```
 
 
 
