@@ -457,106 +457,78 @@ b) we don't commit to any strong prior in the Bayes factor analysis.
 # 
 # # Save to disk:
 # write_rds(sim_H1_LO_125_defPrior_steps12, "sims_etc/sim_H1_LO_125_defPrior_steps12.rds")
-
-
-# Under alternative hypothesis H1 with small-to-medium ES = 0.9
-sim_H1_LO_09_defPrior_steps12 <- BFDA.sim(
-  expected.ES = 0.9,
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=60, n.max=108, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=2000, verbose=TRUE, cores=1)
-
-# [1] "Simulation started at 2019-09-02 15:49:28"
-# [1] "Simulation finished at 2019-09-02 15:53:31"
-# Duration: Time difference of 4.046143 mins
-
-# Save to disk:
-write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
-
-
-
-
-
 # 
 # 
-# Under alternative hypothesis H1 with ES = 0.7 (NB: we increase n.max to see
-# how many participants we'd need)
-# sim.H1_ES07_defPrior_steps16 <- BFDA.sim(
-#   expected.ES = 0.7,
+# # Under alternative hypothesis H1 with small-to-medium ES = 0.9
+# sim_H1_LO_09_defPrior_steps12 <- BFDA.sim(
+#   expected.ES = 0.9,
 #   type = "abtest",
 #   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
 #   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=400, stepsize = 16, boundary=Inf,
+#   n.min=60, n.max=108, stepsize = 12, boundary=Inf,
 #   alternative="greater",
 #   B=2000, verbose=TRUE, cores=1)
 # 
-# # [1] "Simulation started at 2019-08-19 10:42:07"
-# # [1] "Simulation finished at 2019-08-19 11:00:06"
-# # Duration: Time difference of 17.9907 mins
+# # [1] "Simulation started at 2019-09-02 15:56:31"
+# # [1] "Simulation finished at 2019-09-02 16:00:35"
+# # Duration: Time difference of 4.056317 mins
 # 
 # # Save to disk:
-# write_rds(sim.H1_ES07_defPrior_steps16, "sims_etc/sim_H1_ES07_defPrior_steps16.rds")
-# 
-# 
-# 
-# # Under alternative hypothesis H1 with "medium" ES = 1.25 log-odds
-# sim.H1_13_defPrior_steps16 <- BFDA.sim(
-#   expected.ES = 1.25,
-#   type = "abtest",
-#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-#   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=240, stepsize = 16, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# 
-# # [1] "Simulation started at 2019-08-19 11:03:47"
-# # [1] "Simulation finished at 2019-08-19 11:13:27"
-# # Duration: Time difference of 9.655964 mins
-# 
-# # Save to disk:
-# write_rds(sim.H1_13_defPrior_steps16, "sims_etc/sim_H1_13_defPrior_steps16.rds")
+# write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
 # 
 # 
 # # Under null hypothesis H0
-# sim.H0_defPrior_steps16 <- BFDA.sim(
+# sim_H0_defPrior_steps12 <- BFDA.sim(
 #   expected.ES = 0,  # no effect
 #   type = "abtest",
 #   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
 #   options.sample = list(effecttype = "logOR"),
-#   n.min=64, n.max=112, stepsize = 16, boundary=Inf,
+#   n.min=60, n.max=108, stepsize = 12, boundary=Inf,
 #   alternative="greater",
 #   B=2000, verbose=TRUE, cores=1)
 # 
-# # [1] "Simulation started at 2019-08-18 11:36:03"
-# # [1] "Simulation finished at 2019-08-18 11:44:40"
-# # Duration: Time difference of 8.615529 mins
+# # [1] "Simulation started at 2019-09-02 16:04:04"
+# # [1] "Simulation finished at 2019-09-02 16:08:17"
+# # Duration: Time difference of 4.222702 mins
 # 
 # # Save to disk:
-# write_rds(sim.H0_defPrior_steps16, "sims_etc/sim_H0_defPrior_steps16.rds")
+# write_rds(sim_H0_defPrior_steps12, "sims_etc/sim_H0_defPrior_steps12.rds")
 ```
 
 Load from disk
 
 ```{r}
 # Load from disk
-sim.H1_ES05_defPrior_steps16 <- read_rds("sims_etc/sim_H1_ES05_defPrior_steps16.rds")
-sim.H1_ES05_defPrior_steps16
+sim_H1_LO_125_defPrior_steps12 <- read_rds("sims_etc/sim_H1_LO_125_defPrior_steps12.rds")
+sim_H1_LO_125_defPrior_steps12
 
-sim.H1_ES07_defPrior_steps16 <- read_rds("sims_etc/sim_H1_ES07_defPrior_steps16.rds")
-sim.H1_ES07_defPrior_steps16
+sim_H1_LO_09_defPrior_steps12 <- read_rds("sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
+sim_H1_LO_09_defPrior_steps12
 
-sim.H1_13_defPrior_steps16 <- read_rds("sims_etc/sim_H1_13_defPrior_steps16.rds")
-sim.H1_13_defPrior_steps16
-
-
-sim.H0_defPrior_steps16 <- read_rds("sims_etc/sim_H0_defPrior_steps16.rds")
-sim.H0_defPrior_steps16
+sim_H0_defPrior_steps12 <- read_rds("sims_etc/sim_H0_defPrior_steps12.rds")
+sim_H0_defPrior_steps12
 ```
 
 
+#### Under H1 and medium effect size
+
+```{r}
+results_sim(sim_H1_LO_125_defPrior_steps12, T)
+```
+
+
+#### Under H1 and small-to-medium effect size
+
+```{r}
+results_sim(sim_H1_LO_09_defPrior_steps12, T)
+```
+
+
+#### Under H0
+
+```{r}
+results_sim(sim_H0_defPrior_steps12)
+```
 
 
 
@@ -566,4 +538,3 @@ Session info
 ```{r}
 sessionInfo()
 ```
-
