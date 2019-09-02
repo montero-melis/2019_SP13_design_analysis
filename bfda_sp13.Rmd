@@ -1,0 +1,220 @@
+---
+title: "BF design analysis for SP13 replication"
+author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
+date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+output:
+  html_document:
+    depth: 2
+    number_sections: yes
+    theme: default
+    toc: yes
+---
+
+
+Introduction
+============
+
+This script carries out a number of Bayes factor design analyses (BFDA) based on
+the framework laid out in Schönbrodt and Wagenmakers (2017, *Psychon Bull Rev*).
+All BFDA apply to our intended replication of Shebani and Pulvermüller 
+(2013, *Cortex*), henceforth SP13.
+
+What differs between the BFDAs are the assumptions we make about a) effect size
+and b) the type of test we will carry out. See details below.
+
+
+Setup workspace
+===============
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("knitr")
+library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
+library("boot")       # for inv.logit()
+library("BFDA")
+```
+
+Load posterior estimates from `brms` model fitted to original data (these come
+from our reanalysis of the original data, see `reanalysis_original.Rmd`):
+
+```{r}
+# read and convert to vector
+beta_post <- read_csv("sims_etc/beta_posterior.csv") %>%
+  pull(1)
+```
+
+
+
+BFDA using effect size and analysis as in the original study
+============================================
+
+SP13 report an effect size of Cohen's $d = 1.25$ (p.226) for the critical
+interaction effect obtained from a within-subjects ANOVA. Our first BFDA
+follows this estimate, applying a paired t-test design, which is the closest
+available test to the within-subjects ANOVA, and also the one that naturally
+accepts Cohen's $d$ as an effect size estimate.
+
+We run two versions of the simulation, once with the default (non-informative)
+prior and once with an informed prior (Stefan et al., 2019, *Behav Res Meth*).
+The latter uses a prior that places a stronger belief on there actually being
+an effect. It is described as "an example for a typical informed prior for the
+field of psychology" (Stefan et al., 2019, p. 1045). The values of the default
+and informed priors are exactly those used in Stefan et al. (2019).
+
+
+Default prior
+------------
+
+```{r}
+# # Under alternative hypothesis H1 with ES d = 1.25
+# sim_H1_d_125_defPrior <- BFDA.sim(
+#   expected.ES = 1.25,  # as reported in SP13
+#   type = "t.paired",
+#   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 10:48:30"
+# # [1] "Simulation finished at 2019-09-02 10:53:23"
+# # Duration: Time difference of 4.876747 mins
+# 
+# # Save to disk:
+# write_rds(sim_H1_d_125_defPrior, "sims_etc/sim_H1_d_125_defPrior.rds")
+# 
+# # Under null hypothesis H0
+# sim_H0_d_125_defPrior <- BFDA.sim(
+#   expected.ES = 0,  # under H0
+#   type = "t.paired",
+#   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-09-02 10:54:52"
+# # [1] "Simulation finished at 2019-09-02 11:04:19"
+# # Duration: Time difference of 9.448281 mins
+# 
+# # Save to disk:
+# write_rds(sim_H0_d_125_defPrior, "sims_etc/sim_H0_d_125_defPrior.rds")
+```
+
+
+
+
+
+
+Informative prior
+------------------------------
+
+```{r}
+# Under alternative hypothesis H1 with ES = 0.7 (NB: we increase n.max to see
+# how many participants we'd need)
+# sim.H1_ES07_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 0.7,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=400, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-19 10:42:07"
+# # [1] "Simulation finished at 2019-08-19 11:00:06"
+# # Duration: Time difference of 17.9907 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_ES07_defPrior_steps16, "sims_etc/sim_H1_ES07_defPrior_steps16.rds")
+# 
+# 
+# 
+# # Under alternative hypothesis H1 with "medium" ES = 1.25 log-odds
+# sim.H1_13_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 1.25,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=240, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-19 11:03:47"
+# # [1] "Simulation finished at 2019-08-19 11:13:27"
+# # Duration: Time difference of 9.655964 mins
+# 
+# # Save to disk:
+# write_rds(sim.H1_13_defPrior_steps16, "sims_etc/sim_H1_13_defPrior_steps16.rds")
+# 
+# 
+# # Under null hypothesis H0
+# sim.H0_defPrior_steps16 <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=64, n.max=112, stepsize = 16, boundary=Inf,
+#   alternative="greater",
+#   B=2000, verbose=TRUE, cores=1)
+# 
+# # [1] "Simulation started at 2019-08-18 11:36:03"
+# # [1] "Simulation finished at 2019-08-18 11:44:40"
+# # Duration: Time difference of 8.615529 mins
+# 
+# # Save to disk:
+# write_rds(sim.H0_defPrior_steps16, "sims_etc/sim_H0_defPrior_steps16.rds")
+```
+
+
+
+
+```{r}
+# # Under null hypothesis H0
+# sim.H0 <- BFDA.sim(expected.ES = 0,  # no effect
+#                    type = "abtest",
+#                    # prior,  # unsure about this parameter!
+#                    n.min=60, n.max=300, alternative="greater", boundary=Inf, B=1000,
+#                    options.sample = list(effecttype = "logOR"),
+#                    verbose=TRUE, cores=1, stepsize = 20)
+
+# Save/load to/from disk
+# write_rds(sim.H0, "sims_etc/sim_H0.rds")
+sim.H0 <- read_rds("sims_etc/sim_H0.rds")
+sim.H0
+```
+
+
+
+BFDA with analysis as in the original study and effect size from our re-analysis
+=======================================================================
+
+
+
+
+BFDA based on our improved re-analysis (binomial GLMM) of the original data
+=======================================================================
+
+
+Effect size as estimated from the data
+--------------------------------------
+
+
+
+Effect size set to a small-to-medium effect
+-------------------------------------------
+
+
+
+
+
+
+
+Session info
+============
+
+```{r}
+sessionInfo()
+```
+
