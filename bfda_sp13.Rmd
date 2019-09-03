@@ -54,7 +54,7 @@ beta_post <- read_csv("sims_etc/beta_posterior.csv") %>%
 
 
 
-BFDA using effect size and analysis as in the original study
+BFDA using effect size and analysis reported in the original study
 ============================================
 
 SP13 report an effect size of Cohen's $d = 1.25$ (p.226) for the critical
@@ -63,22 +63,18 @@ follows this estimate, applying a paired t-test design, which is the closest
 available test to the within-subjects ANOVA, and also the one that naturally
 accepts Cohen's $d$ as an effect size estimate.
 
-We run two versions of the simulation, once with the default (non-informative)
-prior and once with an informed prior (Stefan et al., 2019, *Behav Res Meth*).
-The latter uses a prior that places a stronger belief on there actually being
-an effect. It is described as "an example for a typical informed prior for the
-field of psychology" (Stefan et al., 2019, p. 1045). The values of the default
-and informed priors are exactly those used in Stefan et al. (2019).
+We run the simulation with the default (non-informative) prior so as to err on
+the conservartive side.(see Stefan et al., 2019, *Behav Res Meth*, for a 
+discussion of choice of prior).
 
 
-Default prior
-------------
 
-Run simulations:
+Simulate hypothetical studies
+-----------------------------
 
 ```{r}
 # # Run simulations and save to disk:
-#
+# 
 # # Under alternative hypothesis H1 with ES d = 1.25
 # sim_H1_d_125_defPrior <- BFDA.sim(
 #   expected.ES = 1.25,  # as reported in SP13
@@ -86,7 +82,7 @@ Run simulations:
 #   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
 #   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
 #   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
+#   B=10000, verbose=TRUE, cores=1)
 # # Save to disk:
 # write_rds(sim_H1_d_125_defPrior, "sims_etc/sim_H1_d_125_defPrior.rds")
 # 
@@ -97,7 +93,7 @@ Run simulations:
 #   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
 #   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
 #   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
+#   B=10000, verbose=TRUE, cores=1)
 # # Save to disk:
 # write_rds(sim_H0_d_125_defPrior, "sims_etc/sim_H0_d_125_defPrior.rds")
 ```
@@ -123,75 +119,20 @@ results_sim <- function(sim, pow = FALSE) {
 }
 ```
 
-### Under H1
+
+Results under H1
+----------------
 
 ```{r, warning=FALSE}
 results_sim(sim_H1_d_125_defPrior, T)
 ```
 
-### Under H0
+Results under H0
+----------------
 
 ```{r}
 results_sim(sim_H0_d_125_defPrior)
 ```
-
-
-
-Informed prior
---------------
-
-Run simulations (only the `prior` argument changes):
-
-```{r}
-# # Run simulations and save to disk:
-# 
-# # Under alternative hypothesis H1 with ES d = 1.25
-# sim_H1_d_125_infPrior <- BFDA.sim(
-#   expected.ES = 1.25,  # as reported in SP13
-#   type = "t.paired",
-#   prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
-#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# # Save to disk:
-# write_rds(sim_H1_d_125_infPrior, "sims_etc/sim_H1_d_125_infPrior.rds")
-# 
-# # Under null hypothesis H0
-# sim_H0_d_125_infPrior <- BFDA.sim(
-#   expected.ES = 0,  # under H0
-#   type = "t.paired",
-#   prior=list("t", list(prior.location=0.35, prior.scale=0.102, prior.df=3)),  # informed prior following Stefan et al. (2019, p.1045)
-#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
-#   alternative="greater",
-#   B=2000, verbose=TRUE, cores=1)
-# # Save to disk:
-# write_rds(sim_H0_d_125_infPrior, "sims_etc/sim_H0_d_125_infPrior.rds")
-```
-
-Once run, load from disk:
-
-```{r}
-# Load from disk
-sim_H1_d_125_infPrior <- read_rds("sims_etc/sim_H1_d_125_infPrior.rds")
-sim_H1_d_125_infPrior
-
-sim_H0_d_125_infPrior <- read_rds("sims_etc/sim_H0_d_125_infPrior.rds")
-sim_H0_d_125_infPrior
-```
-
-
-### Under H1
-
-```{r, warning=FALSE}
-results_sim(sim_H1_d_125_infPrior, T)
-```
-
-### Under H0
-
-```{r}
-results_sim(sim_H0_d_125_infPrior, F)
-```
-
 
 
 
@@ -203,8 +144,10 @@ we obtain an effect size of Cohen's $d = 0.9$ (see `reanalysis_original.html`).
 
 Next we run simulations based on this effect size, again using a paired t-test.
 
-Note that we only run the simulations with the default (non-informative) priors
-so as to err on the conservartive side.
+
+
+Simulate hypothetical studies
+-----------------------------
 
 ```{r}
 # # Run simulations and save to disk:
@@ -388,10 +331,6 @@ results_sim(sim.H1_origES_defPrior, T)
 results_sim(sim.H0_origES_defPrior)
 ```
 
-
-
-### Conclusion
-
 These simulations indicate that not even an N as large as 3000 (!) participants
 would suffice to adhere to the journal guidelines to "guarantee data collection
 until the Bayes factor is at least 6 times in favour of the experimental
@@ -409,7 +348,8 @@ a) the effect size was either "medium" (i.e. 1.25 log-odds) or "small-to-medium"
 (i.e., 0.9 log-odds); and
 b) we don't commit to any strong prior in the Bayes factor analysis.
 
-### Run the simulations
+
+### Simulate hypothetical studies
 
 ```{r}
 # # Under alternative hypothesis H1 with medium ES = 1.25
@@ -484,6 +424,9 @@ results_sim(sim_H1_LO_09_defPrior_steps12, T)
 results_sim(sim_H0_defPrior_steps12)
 ```
 
+
+Conclusion
+==========
 
 
 Session info
