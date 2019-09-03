@@ -17,7 +17,7 @@ Setup workspace
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, message=FALSE}
 library("knitr")
 library("lme4")
 library("brms")
@@ -34,7 +34,7 @@ Original data set
 =================
 
 
-```{r}
+```{r, message=FALSE}
 # Load data
 d_allconds <- read_csv("orig_study/SP13_orig-data_total-errors_long-format.csv")
 d_allconds$subject <- factor(d_allconds$subject)
@@ -42,14 +42,13 @@ d_allconds$subject <- factor(d_allconds$subject)
 
 ```{r}
 kable(head(d_allconds))
-str(d_allconds)
 ```
 
 - The data show the total number of errors, adding all three types of errors:
 omissions, replacements, and transpositions.
 - This data set contains the data for all four movement conditions:
-`r unique(d_allconds$movement)`. However, we are only interested in
-the arm/leg movement conditions, so we subset the data:
+`r unique(d_allconds$movement)`. However, we are only interested in the two
+critical arm/leg movement conditions, so we subset the relevant data:
 
 ```{r}
 d <- d_allconds %>% filter(movement %in% c("arm_paradi", "leg_paradi"))
@@ -109,7 +108,7 @@ d_allconds %>%
   )
 ```
 
-Yes, they do!
+Yes, they do so precisely!
 
 
 ## Anova on full 4 (conditions) x 2 (word categories) design:
