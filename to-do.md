@@ -5,6 +5,7 @@ bfda_sp13
 ---------
 
 - Run all simulations with B = 10000
+- State so in the intro!
 - Add simulation with t-test + d=0.4
 
 reanalysys_original
