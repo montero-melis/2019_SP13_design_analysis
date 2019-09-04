@@ -115,7 +115,7 @@ sim_H0_d_125_defPrior
 results_sim <- function(sim, pow = FALSE) {
   print(BFDA.analyze(sim, design = "sequential", boundary = c(1/6, 6)))
   plot(sim, boundary=c(1/6, 6))
-  if (pow) { SSD(sim, power=.80, boundary=c(1/6, 6)) }
+  if (pow) { SSD(sim, power=.90, boundary=c(1/6, 6)) }
 }
 ```
 
@@ -189,7 +189,7 @@ Same as above.
 
 
 
-BFDA based on ANOVA as in the original study and effect size from $\eta^2$
+BFDA based on ANOVA as in original study and $d$ converted from $\eta^2$
 =======================================================================
 
 When we re-analyze the data with an ANOVA and convert the $\eta^2$ of the
@@ -204,21 +204,19 @@ Simulate hypothetical studies
 -----------------------------
 
 ```{r}
-# Run simulations and save to disk (took ~Xh):
-
-# Under alternative hypothesis H1 with ES d = 1.25
-sim_H1_d_04_defPrior <- BFDA.sim(
-  expected.ES = 0.4,  # from eta-squared in ANOVA
-  type = "t.paired",
-  prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
-  n.min=12, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H1_d_04_defPrior, "sims_etc/sim_H1_d_04_defPrior.rds")
-
-# Under null hypothesis H0: The simulation here is the same as in
-# sim_H0_d_125_defPrior, so no need to run it anew
+# # Run simulations under alternative hypothesis H1 (took ~40'):
+# sim_H1_d_04_defPrior <- BFDA.sim(
+#   expected.ES = 0.4,  # from eta-squared in ANOVA
+#   type = "t.paired",
+#   prior=list("Cauchy",list(prior.location=0, prior.scale=sqrt(2)/2)),  # default non-informative
+#   n.min=12, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H1_d_04_defPrior, "sims_etc/sim_H1_d_04_defPrior.rds")
+# 
+# # Under null hypothesis H0: The simulation here is the same as in
+# # sim_H0_d_125_defPrior, so no need to run it anew
 ```
 
 Once run, load from disk:
@@ -351,18 +349,18 @@ Simulate data under H1 and H0 and save to disk.
 #   B=10000, verbose=TRUE, cores=1)
 # # Save to disk:
 # write_rds(sim_H1_origES_defPrior, "sims_etc/sim_H1_origES_defPrior.rds")
-
-# Under null hypothesis H0
-sim_H0_origES_defPrior <- BFDA.sim(
-  expected.ES = 0,  # no effect
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H0_origES_defPrior, "sims_etc/sim_H0_origES_defPrior.rds")
+# 
+# # Under null hypothesis H0 (~2.5h)
+# sim_H0_origES_defPrior <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=100, n.max=3000, stepsize = 100, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H0_origES_defPrior, "sims_etc/sim_H0_origES_defPrior.rds")
 ```
 
 Load from disk
@@ -411,41 +409,41 @@ b) we don't commit to any strong prior in the Bayes factor analysis.
 ### Simulate hypothetical studies
 
 ```{r}
-# Under alternative hypothesis H1 with medium ES = 1.25
-sim_H1_LO_125_defPrior_steps12 <- BFDA.sim(
-  expected.ES = 1.25,
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=60, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H1_LO_125_defPrior_steps12, "sims_etc/sim_H1_LO_125_defPrior_steps12.rds")
-
-# Under alternative hypothesis H1 with small-to-medium ES = 0.9
-sim_H1_LO_09_defPrior_steps12 <- BFDA.sim(
-  expected.ES = 0.9,
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=60, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
-
-# Under null hypothesis H0
-sim_H0_defPrior_steps12 <- BFDA.sim(
-  expected.ES = 0,  # no effect
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=60, n.max=96, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H0_defPrior_steps12, "sims_etc/sim_H0_defPrior_steps12.rds")
+# # Under alternative hypothesis H1 with medium ES (~20')
+# sim_H1_LO_125_defPrior_steps12 <- BFDA.sim(
+#   expected.ES = 1.25,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=60, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H1_LO_125_defPrior_steps12, "sims_etc/sim_H1_LO_125_defPrior_steps12.rds")
+# 
+# # Under alternative hypothesis H1 with small-to-medium ES (~20')
+# sim_H1_LO_09_defPrior_steps12 <- BFDA.sim(
+#   expected.ES = 0.9,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=60, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
+# 
+# # Under null hypothesis H0 (~20')
+# sim_H0_defPrior_steps12 <- BFDA.sim(
+#   expected.ES = 0,  # no effect
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=60, n.max=96, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H0_defPrior_steps12, "sims_etc/sim_H0_defPrior_steps12.rds")
 ```
 
 Load from disk
