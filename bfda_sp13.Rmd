@@ -115,7 +115,7 @@ sim_H0_d_125_defPrior
 results_sim <- function(sim, pow = FALSE) {
   print(BFDA.analyze(sim, design = "sequential", boundary = c(1/6, 6)))
   plot(sim, boundary=c(1/6, 6))
-  if (pow) { SSD(sim, power=.90, boundary=c(1/6, 6)) }
+  if (pow) { SSD(sim, power=.89, boundary=c(1/6, 6)) }  # pow=.89 bc there seems to be a small bug
 }
 ```
 
@@ -395,18 +395,37 @@ hypothesis over the null hypothesis (or vice versa)."
 
 
 
-Effect size set to a small-to-medium effect
--------------------------------------------
+BFDA based on improved analysis method and small-to-medium effect
+=================================================================
 
 Since adjusting our sample size to the estimates above is unfeasible, we opted
-for a design that would allow us to plan for compelling evidence if
+for a design that would allow us to plan for compelling evidence if the effect
+size was either "medium" (i.e. 1.25 log-odds) or "small-to-medium" (i.e., 0.9
+log-odds).
+As previously, in these simulations we don't commit to any strong prior for the
+Bayes factor analysis.
 
-a) the effect size was either "medium" (i.e. 1.25 log-odds) or "small-to-medium"
-(i.e., 0.9 log-odds); and
-b) we don't commit to any strong prior in the Bayes factor analysis.
+We follow Chen et al.'s (2010) rules of thumb regarding what counts as "small",
+"medium", and "large" effect sizes measured in log-odds (who in turn derive their
+estimates from Cohen's [1988] guidelines):
 
 
-### Simulate hypothetical studies
+```{r, include = FALSE}
+ES_chen <- tibble(
+  "Label (Chen et al., 2010)" = c("Small", "Medium", "Large"),
+  odds  = c(1.68, 3.47, 6.71)
+  ) %>%
+  mutate("log-odds" = log(odds))
+ES_chen %>% kable(digits = 2)
+```
+
+We ran two simulations, one setting the effect size to a "medium" effect
+(1.25 log-odds) and one with a "small"-to-"medium" effect size (0.9 log-odds).
+
+
+
+Simulate hypothetical studies under medium and small-to-medium effect sizes
+---------------------------------------------------------------------
 
 ```{r}
 # # Under alternative hypothesis H1 with medium ES (~20')
@@ -461,21 +480,24 @@ sim_H0_defPrior_steps12
 ```
 
 
-### Under H1 and medium effect size
+Under H1 and medium effect size
+-------------------------------
 
 ```{r, warning=FALSE}
 results_sim(sim_H1_LO_125_defPrior_steps12, T)
 ```
 
 
-### Under H1 and small-to-medium effect size
+Under H1 and small-to-medium effect size
+-------------------------------
 
 ```{r, warning=FALSE}
 results_sim(sim_H1_LO_09_defPrior_steps12, T)
 ```
 
 
-### Under H0
+Under H0
+--------
 
 ```{r}
 results_sim(sim_H0_defPrior_steps12)
@@ -484,6 +506,15 @@ results_sim(sim_H0_defPrior_steps12)
 
 Conclusion
 ==========
+
+Our proposed design with $N_{min}=60$ and $N_{max}=96$ (step size = 12) and the
+evidence threshold set at $BF_{10} > 6$ or $BF_{01} > 6$ will largely suffice to
+guarantee high power (>90%) if the effect was as strong as reported in the
+original study. However, since a) our re-analysis of the original data suggests
+that the effect size might have been severely over-estimated, and b) the
+original ANOVA-based analysis seem inappropriate for the data at hand, we have
+chosen a design that will also guarantee  a high probability of compelling
+evidence using an improved analysis method and with a small-to-medium effect size.
 
 
 Session info
