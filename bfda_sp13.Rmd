@@ -52,6 +52,17 @@ beta_post <- read_csv("sims_etc/beta_posterior.csv") %>%
   pull(1)
 ```
 
+Convenience function:
+
+```{r}
+# Wrapper function to display the results of the simulation:
+results_sim <- function(sim, pow = FALSE, bound = c(1/6, 6)) {
+  print(BFDA.analyze(sim, design = "sequential", boundary = c(1/6, 6)))
+  plot(sim, boundary = bound)  # pass argument when it crashes with default
+  if (pow) { SSD(sim, power=.9, boundary=c(1/6, 6)) }
+}
+```
+
 
 
 BFDA using effect size and analysis reported in the original study
@@ -107,16 +118,6 @@ sim_H1_d_125_defPrior
 
 sim_H0_d_125_defPrior <- read_rds("sims_etc/sim_H0_d_125_defPrior.rds")
 sim_H0_d_125_defPrior
-```
-
-
-```{r}
-# Wrapper function to display the results of the simulation:
-results_sim <- function(sim, pow = FALSE) {
-  print(BFDA.analyze(sim, design = "sequential", boundary = c(1/6, 6)))
-  plot(sim, boundary=c(1/6, 6))
-  if (pow) { SSD(sim, power=.89, boundary=c(1/6, 6)) }  # pow=.89 bc there seems to be a small bug
-}
 ```
 
 
@@ -537,7 +538,7 @@ Under H1 and small-to-medium effect size with maxN=144
 -------------------------------
 
 ```{r, warning=FALSE}
-results_sim(sim_H1_LO_09_defPrior_steps12_maxN144, T)
+results_sim(sim_H1_LO_09_defPrior_steps12_maxN144, T, bound =  c(1/5, 6))
 ```
 
 
