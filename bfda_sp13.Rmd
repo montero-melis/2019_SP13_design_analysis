@@ -472,19 +472,19 @@ Simulate hypothetical studies under medium and small-to-medium effect sizes
 #   B=10000, verbose=TRUE, cores=1)
 # # Save to disk:
 # write_rds(sim_H1_LO_09_defPrior_steps12, "sims_etc/sim_H1_LO_09_defPrior_steps12.rds")
-
-# Under alternative hypothesis H1 with medium ES (~20') and maxN = 144
-sim_H1_LO_09_defPrior_steps12_maxN144 <- BFDA.sim(
-  expected.ES = 0.9,
-  type = "abtest",
-  prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
-  options.sample = list(effecttype = "logOR"),
-  n.min=60, n.max=144, stepsize = 12, boundary=Inf,
-  alternative="greater",
-  B=10000, verbose=TRUE, cores=1)
-# Save to disk:
-write_rds(sim_H1_LO_09_defPrior_steps12_maxN144, "sims_etc/sim_H1_LO_09_defPrior_steps12_maxN144.rds")
-
+# 
+# # Under alternative hypothesis H1 with medium ES (~40') and maxN = 144
+# sim_H1_LO_09_defPrior_steps12_maxN144 <- BFDA.sim(
+#   expected.ES = 0.9,
+#   type = "abtest",
+#   prior=list("normal", list(prior.mean = 0, prior.variance = 1)),
+#   options.sample = list(effecttype = "logOR"),
+#   n.min=60, n.max=144, stepsize = 12, boundary=Inf,
+#   alternative="greater",
+#   B=10000, verbose=TRUE, cores=1)
+# # Save to disk:
+# write_rds(sim_H1_LO_09_defPrior_steps12_maxN144, "sims_etc/sim_H1_LO_09_defPrior_steps12_maxN144.rds")
+# 
 # 
 # # Under null hypothesis H0 (~20')
 # sim_H0_defPrior_steps12 <- BFDA.sim(
