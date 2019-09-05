@@ -10,8 +10,26 @@ output:
     toc: yes
 ---
 
-Setup workspace
-===============
+
+Introduction
+============
+
+This report presents a re-analysis of the original data from the study
+Shebani and Pulvermüller (2013, *Cortex*, hereafter SP13). In the script we:
+
+- Plot and summarize the data to check we obtain the same summaries as in SP13;
+- Replicate the same ANOVAs reported in the original;
+- Try to figure out how SP13 arrived at the effect size measure they report;
+- Re-analyze the data with more appropriate statistical methods.
+
+
+*NB*:
+The data were kindly shared with us by the original authors, but we have agreed
+not to further distribute it and for this reason this script cannot be reproduced.
+The data is only on our disk and not included in this git repository.
+
+
+Setup workspace:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -52,8 +70,7 @@ critical arm/leg movement conditions, so we subset the relevant data:
 
 ```{r}
 d <- d_allconds %>% filter(movement %in% c("arm_paradi", "leg_paradi"))
-kable(head(d))
-str(d)
+# str(d)
 ```
 
 
@@ -66,9 +83,9 @@ ggplot(d, aes(x = word_type, y = errors, colour = word_type)) +
 ```
 
 We can qualitatively see the cross-over interaction. Note that although the
-variability is large, the effect is still able to come out if there is sufficient
-consistency within subjects, as it is a within-subjects design. This can be
-better appreciated in the following plot:
+variability is large, a hypothetical effect may still be detected if there is
+sufficient consistency within subjects, as it is a within-subjects design. This
+can be better appreciated in the following plot:
 
 ```{r, include = FALSE}
 # basic plot
@@ -397,15 +414,19 @@ $e ^ {`r round(fixef(bfm_binom)[4,1], 2)`} =`r round(exp(fixef(bfm_binom)[4,1]),
 In other words, participants were `r round(exp(fixef(bfm_binom)[4,1]), 2)` times
 more likely to make an error if effector and semantics match than if they mismatch.
 This is the *interference effect* of interest!
+- The *brms* model also features 95% credible intervals for parameter estimates.
+The 95% credible interval for the critical interaction is
+$[`r round(fixef(bfm_binom)[4,3], 2)`, `r round(fixef(bfm_binom)[4,4], 2)`]$.
+Note that zero is not contained in this interval.
 
 
-Effect size
+Effect size is small
 -----------
 
 This is a very small effect size...
 
 
-But is the effect really supported by the data?
+Is the effect really supported by the data?
 -------------------------------
 
 *brms* allows us to perform "non-linear hypothesis testing". This lets us test
@@ -418,7 +439,9 @@ hypothesis(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg > 0")
 
 The evidence ratio that there exists an interference effect is overwhelming.
 
-We can also plot the posterior distribution of the model estimates:
+We can also plot the posterior distribution of the model estimates and observe
+that the posterior distribution for the interfefence effect (4th panel in left
+column) is clearly distinct from zero:
 
 ```{r, fig.height=7}
 plot(bfm_binom)
@@ -426,15 +449,15 @@ plot(bfm_binom)
 
 
 
-Save posterior distribution of interaction coefficient to use as effect size prior for BFDA
-============================================
+Save posterior distribution of interaction coefficient to use as effect size in BFDA
+-----------------------------------------
 
 *brms* has a `posterior_samples(x, pars)` function to get posterior traces for
 specific coefficients. We pass our fitted *brms* model as x, and the predictor
 of interest as pars, and obtain a dataframe with the samples in return.
 
-This posterior from the original we can then use as the prior for the design
-analysis in our replication.
+This posterior from the original we can then use as the prior for the Bayes 
+factor design analysis (BFDA) in our replication.
 
 ```{r}
 beta_posterior <- posterior_samples(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg")
@@ -446,50 +469,39 @@ write_csv(beta_posterior, "sims_etc/beta_posterior.csv")
 GLMM with *lme4*
 ================
 
-We start by fitting a frequentist GLMM with *lme4* for a first quick
-interpretation of the estimated model coefficients.
+As a sanity check, we also fit a frequentist version of the GLMM above with the
+*lme4* package. Do we roughly obtain the same estimates?
 
-Binomial GLMM
--------------
+
+We first fit the equivalent model to the above:
 
 ```{r}
-fm_binom <- glmer(cbind(errors, n - errors) ~ 1 + movement * word_type +
-                    (1 | subject),
+fm_binom <- glmer(cbind(errors, n - errors) ~ 1 + movement * word_type + (1 | subject),
                   data = d, family = "binomial")
 summary(fm_binom)
 ```
 
-Interpretation (backtransforming to odds):
+Indeed the point estimates are almost identical:
 
-- The estimated average odds of making an error (intercept) is 
-$e ^ {`r round(fixef(fm_binom)[1], 2)`} = `r round(exp(fixef(fm_binom)[1]), 2)`$
-(corresponding to a probability of
-`r round(inv.logit(fixef(fm_binom)[1]), 2)`)
-- Neither movement condition (`movement`) or the type of word (`word_type`)
-have a significant effect on the odds of making an error per se (i.e., no main
-effects).
-- The critical interaction, however, is significant and tells us that the odds of making
-an error if the effector of the movement *coincides* with the word type (as
-opposed to when the two differ) is
-$e ^ {`r round(fixef(fm_binom)[4], 2)`} =`r round(exp(fixef(fm_binom)[4]), 2)`$.
-In other words, participants were `r round(exp(fixef(fm_binom)[4]), 2)` times
-more likely to make an error if effector and semantics match than if they mismatch.
-This is the *interference effect* of interest!
+```{r}
+tibble(
+  Coefficient = rownames(fixef(bfm_binom)),
+  brms = fixef(bfm_binom)[, 1],
+  lme4 = fixef(fm_binom)
+) %>%
+  kable(digits = 3)
+```
 
+Note that the estimated SEMs for the fixed-effects coefficients also are quite
+comparable. One estimate that is higher in the `brms` model is the subject-level
+SD. However, we can also see that the `lme4` estimate is well contained in the
+95% C.I. of the `brms` model.
 
-
-The point estimates are virtually identical in the *brms* and *lme4* models.
-The *brms* model also features 95% credible intervals for parameter estimates.
-The 95% credible interval for the critical interaction
-$[`r round(fixef(bfm_binom)[4,3], 2)`, `r round(fixef(bfm_binom)[4,4], 2)`]$
-clearly contains the point estimate from the *lme4* model, and the two are 
-identical
-(*brms*: $`r round(fixef(bfm_binom)[4,1], 3)`$;
-*lme4*: $`r round(fixef(fm_binom)[4], 3)`$).
-Note that the estimated SEM also are quite comparable.
+In sum, both ways of analyzing the data (`brms` and `lme4`) yield highly
+similar results.
 
 
-Is the effect we find in the sample robust? Apply bootstrapping!
+Is the effect we find in the sample robust? Apply bootstrapping
 ============================
 
 Markus suggested that the apparently robust interaction effect observed in the
