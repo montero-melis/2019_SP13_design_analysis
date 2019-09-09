@@ -54,7 +54,7 @@ Original data set
 
 ```{r, message=FALSE}
 # Load data
-d_allconds <- read_csv("orig_study/SP13_orig-data_total-errors_long-format.csv")
+d_allconds <- read_csv("SP13_orig-data_total-errors_long-format.csv")
 d_allconds$subject <- factor(d_allconds$subject)
 ```
 
