@@ -24,9 +24,9 @@ Shebani and Pulvermüller (2013, *Cortex*, hereafter SP13). In the script we:
 
 
 *NB*:
-The data were kindly shared with us by the original authors, but we have agreed
-not to further distribute it and for this reason this script cannot be reproduced.
-The data is only on our disk and not included in this git repository.
+The original data have been made publicly available by the original authors
+at https://github.com/zshebani/LMB/tree/1.0
+(DOI: 10.5281/zenodo.3402035).
 
 
 Setup workspace:

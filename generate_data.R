@@ -14,8 +14,13 @@ fm <- readRDS("sims_etc/bayes_glmm_default.rds")
 ## Save model estimates in a format that serves as input for the function
 
 # Fixed effects
+# Vector of coefficient means
 fixef_means <- fixef(fm)[, 1]
+# # Substitute a 0 effect (or any other value) for the critical interaction:
+# fixef_means[4] <- 0
 fixef_means
+
+# Covariance matrix (Sigma)
 fixef_sigma <- diag(fixef(fm)[, 2]) ^ 2  # we assume uncorrelated diagonal matrix
 fixef_sigma
 
@@ -47,6 +52,8 @@ d_list <- simulate_binom(
 # The output consists of a list of data frames:
 names(d_list)
 d_list
+# E.g., mean fixed effects
+d_list[[2]]
 # First list contains the actual data set
 d <- d_list[[1]]
 head(d)
@@ -149,3 +156,20 @@ summary(fm4)
 
 # Compare models with anova function (LRT):
 anova(fm0, fm1a, fm1b, fm2, fm3, fm4)
+
+
+# brms model
+fm_brm <- brm(
+  Error ~ 1 + movement * word_type +
+    (1 + movement * word_type | subject) +
+    (1 + movement | item),
+  data = d,
+  family = "bernoulli",
+  warmup = 2000, iter = 7000
+  )
+# To save time, save fitted model to file
+saveRDS(fm_brm, "sims_etc/brm_glmm_simulated_data.rds")
+
+# fm_brm <- readRDS("sims_etc/brm_glmm_simulated_data.rds")
+
+summary(fm_brm)
