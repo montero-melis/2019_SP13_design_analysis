@@ -429,24 +429,24 @@ myprior <- set_prior("normal(0, 2)", class = "b")
 ```
 
 
-Fit the model
+Fit the model:
 
 ```{r}
-# with interaction
-bfm_binom_normprior <- brm(
-  errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
-  data = d,
-  prior = myprior,
-  family = "binomial",
-  iter = 10000, warmup = 1000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
-  save_all_pars = TRUE
-  )
-# without interaction
-full_brms = brm(WMI ~ session * group + (1|id), data = mixed_data, prior = priors_mixed, save_all_pars = TRUE, iter = 10000)
-bfm_binom_normprior_nointeract <- update(
-  bfm_binom_normprior, formula = ~ . -movement : word_type)  # Same but without the interaction term
-# # To save time, save fitted model to file
-# saveRDS(bfm_binom, "sims_etc/bayes_glmm_default.rds")
+# # with interaction
+# bfm_binom_normprior <- brm(
+#   errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
+#   data = d,
+#   prior = myprior,
+#   family = "binomial",
+#   iter = 10000, warmup = 1000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
+#   save_all_pars = TRUE
+#   )
+# saveRDS(bfm_binom_normprior, "sims_etc/bayes_glmm_normprior_interact.rds")
+# # without interaction
+# bfm_binom_normprior_nointeract <- update(
+#   bfm_binom_normprior, formula = ~ . -movement : word_type  # Same but without the interaction term
+#   )  
+# saveRDS(bfm_binom_normprior_nointeract, "sims_etc/bayes_glmm_normprior_nointeract.rds")
 ```
 
 
