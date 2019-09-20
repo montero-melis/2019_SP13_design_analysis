@@ -171,7 +171,7 @@ MSE and I am not sure how they were computed.
 
 
 
-## Anova on critical 2x2 design
+## Anova on critical 2 x 2 design
 
 Most importantly, can we replicate the critical results
 "directly addressing the main hypothesis motivating this study" (SP13, p.226)?
@@ -361,15 +361,18 @@ d$n <- 48
 
 
 Bayesian GLMM (binomial mixed model) with *brms*
-=========================
+========================================
 
-We fit a binomial model using the default options for priors
-(for the syntax of how to specify the response variable in a binomial model,
-see Bürkner 2017, p.7, fn 3).
+We fit a binomial model using the same priors as we are going to use in our
+replication:
+
+- Weakly informative priors for all population-level fixed effects coefficients:
+$N(0,\sigma^2 = 4)$;
+- `brms`'s default priors for the variance components (random effects).
 
 
-Fit model with default priors
-----------------------------
+Fit the model
+-------------
 
 First, set coding scheme to contrast coding:
 
@@ -386,27 +389,6 @@ colnames(contrasts(d$word_type)) <- "arm_vs_leg"
 contrasts(d$word_type)
 ```
 
-Fit the model
-
-```{r}
-# bfm_binom <- brm(
-#   errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
-#   data = d,
-#   family = "binomial",
-#   warmup = 2000, iter = 7000
-#   )
-# # To save time, save fitted model to file
-# saveRDS(bfm_binom, "sims_etc/bayes_glmm_default.rds")
-```
-
-Once saved to disk, load it:
-```{r}
-bfm_binom <- readRDS("sims_etc/bayes_glmm_default.rds")
-```
-
-
-Fit model with same priors we will use in the replication
-----------------------------
 
 See which priors can be specified for this model and what defaults there are?
 
@@ -418,22 +400,24 @@ get_prior(
   )
 ```
 
-Specify weakly informative priors $N(0,\sigma^2 = 4)$ for population-level fixed effects:
+Specify weakly informative priors $N(0,\sigma^2 = 4)$ for population-level fixed
+effects:
 
 ```{r}
 myprior <- set_prior("normal(0, 2)", class = "b")  
-# NB: In Stan normal is specified with sigma, see
+# NB: In Stan normal is specified with sigma (*not* sigma^2), see
 # https://mc-stan.org/docs/2_18/functions-reference/normal-distribution.html
 # and
 # https://stackoverflow.com/questions/52893379/stan-in-r-standard-deviation-or-variance-in-normal-distribution
 ```
 
 
-Fit the model:
+Fit two models, one is the actual full model of interest, the other is identical,
+except that it does not contain the interaction between Movement and Word type:
 
 ```{r}
 # # with interaction
-# bfm_binom_normprior <- brm(
+# bfm_binom <- brm(
 #   errors | trials(n) ~ 1 + movement * word_type + (1 | subject),
 #   data = d,
 #   prior = myprior,
@@ -441,13 +425,27 @@ Fit the model:
 #   iter = 10000, warmup = 1000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
 #   save_all_pars = TRUE
 #   )
-# saveRDS(bfm_binom_normprior, "sims_etc/bayes_glmm_normprior_interact.rds")
+# saveRDS(bfm_binom, "sims_etc/bayes_glmm_normprior_interact.rds")
+# 
 # # without interaction
-# bfm_binom_normprior_nointeract <- update(
-#   bfm_binom_normprior, formula = ~ . -movement : word_type  # Same but without the interaction term
+# bfm_binom_nointeract <- update(
+#   bfm_binom, formula = ~ . -movement : word_type  # Same but without the interaction term
 #   )  
-# saveRDS(bfm_binom_normprior_nointeract, "sims_etc/bayes_glmm_normprior_nointeract.rds")
+# saveRDS(bfm_binom_nointeract, "sims_etc/bayes_glmm_normprior_nointeract.rds")
 ```
+
+
+```{r}
+# Load models from disk:
+bfm_binom <- readRDS("sims_etc/bayes_glmm_normprior_interact.rds")
+bfm_binom_nointeract <- readRDS("sims_etc/bayes_glmm_normprior_nointeract.rds")
+```
+
+```{r}
+# Sanity check - verify priors:
+prior_summary(bfm_binom)
+```
+
 
 
 Model summary and interpretation
@@ -457,15 +455,15 @@ Model summary and interpretation
 summary(bfm_binom)
 ```
 
-Or with a prettier and somewhat simplified layout (note effects are converted to 
-odd-ratios):
+Or with a prettier and somewhat simplified layout (but note that effects are
+converted to odd-ratios!):
 
 ```{r}
 tab_model(bfm_binom)
 ```
 
 
-Interpretation (backtransforming to odds):
+**Interpretation (backtransforming to odds)**:
 
 - The estimated average odds of an error (intercept) is 
 $e ^ {`r round(fixef(bfm_binom)[1, 1], 2)`} = `r round(exp(fixef(bfm_binom)[1, 1]), 2)`$
@@ -486,24 +484,28 @@ $[`r round(fixef(bfm_binom)[4,3], 2)`, `r round(fixef(bfm_binom)[4,4], 2)`]$.
 Note that zero is not contained in this interval.
 
 
-Effect size is small
------------
 
-This is a very small effect size...
-
-
-Is the effect really supported by the data?
+Is the effect supported by the data? (Bayes factor)
 -------------------------------
 
-*brms* allows us to perform "non-linear hypothesis testing". This lets us test
-the hypothesis that the crucial interaction is larger than zero (i.e., there is
-an interference effect):
+There are different ways to compute Bayes factors. We use the one that is
+recommended in [this](https://rpubs.com/lindeloev/bayes_factors)
+post by Jonas Kristoffer Lindeløv (and also by 
+[Paul Buerkner](https://twitter.com/paulbuerkner/status/963585470482604033?lang=en),
+the developer of `brms`, himself).
+
 
 ```{r}
-hypothesis(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg > 0")
+# To compute the Bayes factor for the interaction being different from zero we
+# run the bayes_factor() function on the models with and without the interaction:
+# BF_bfm <- brms::bayes_factor(bfm_binom, bfm_binom_nointeract)
+# saveRDS(BF_bfm, "sims_etc/BF_bfm.rds")
+BF_bfm <- readRDS("sims_etc/BF_bfm.rds")
+BF_bfm
 ```
 
-The evidence ratio that there exists an interference effect is overwhelming.
+This BF consists "strong" evidence (BF > 0) in favour of the alternative hypothesis
+that the interaction is not zero.
 
 We can also plot the posterior distribution of the model estimates and observe
 that the posterior distribution for the interfefence effect (4th panel in left
@@ -515,21 +517,15 @@ plot(bfm_binom)
 
 
 
-Save posterior distribution of interaction coefficient to use as effect size in BFDA
------------------------------------------
 
-*brms* has a `posterior_samples(x, pars)` function to get posterior traces for
-specific coefficients. We pass our fitted *brms* model as x, and the predictor
-of interest as pars, and obtain a dataframe with the samples in return.
+However, the effect size is small
+-----------
 
-This posterior from the original we can then use as the prior for the Bayes 
-factor design analysis (BFDA) in our replication.
-
-```{r}
-beta_posterior <- posterior_samples(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg")
-write_csv(beta_posterior, "sims_etc/beta_posterior.csv")
-```
-
+However, while the effect seems to be there, an effect size of
+`r round(fixef(bfm_binom)[1, 1], 2)` log-odds is small. For instance, 
+according to the guidelines proposed by Chen, Cohen, and Chen (2010), an effect
+of 0.5 log-odds would be considered a "small" effect. The current effect being
+less than one third of this could even be considered very small.
 
 
 GLMM with *lme4*
@@ -539,11 +535,13 @@ As a sanity check, we also fit a frequentist version of the GLMM above with the
 *lme4* package. Do we roughly obtain the same estimates?
 
 
-We first fit the equivalent model to the above:
+We fit an equivalent model to the one above:
 
 ```{r}
-fm_binom <- glmer(cbind(errors, n - errors) ~ 1 + movement * word_type + (1 | subject),
-                  data = d, family = "binomial")
+fm_binom <- glmer(
+  cbind(errors, n - errors) ~ 1 + movement * word_type + (1 | subject),
+  data = d, family = "binomial"
+  )
 summary(fm_binom)
 ```
 
@@ -559,18 +557,14 @@ tibble(
 ```
 
 Note that the estimated SEMs for the fixed-effects coefficients also are quite
-comparable. One estimate that is higher in the `brms` model is the subject-level
-SD. However, we can also see that the `lme4` estimate is well contained in the
-95% C.I. of the `brms` model.
-
-In sum, both ways of analyzing the data (`brms` and `lme4`) yield highly
-similar results.
+comparable. This shows that our results are not specific to using Bayesian
+GLMMs (in `brms`).
 
 
 Is the effect we find in the sample robust? Apply bootstrapping
 ============================
 
-Markus suggested that the apparently robust interaction effect observed in the
+Markus wondered if the apparently robust interaction effect observed in the
 original data might hinge on just a few participants who are driving the effect. 
 One way of assessing this is through bootstrapping.
 
@@ -682,9 +676,7 @@ with(bootstr_res, sum(zval < 1.96) / length(zval))
 Based on bootstrapping it does not seem that the effect is very sensitive to
 a few exceptional participants within the sample. But of course it could still
 be that the sampled data itself (in the experiment) was exceptional, leading
-to a conclusion that would not scale up to the larger population (or it might
-not even replicate within that participant sample if the experiment was run
-anew with the same participants).
+to a conclusion that would not scale up to the larger population.
 
 
 Session info
