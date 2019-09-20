@@ -43,6 +43,7 @@ library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("boot")       # for inv.logit()
 library("DescTools")  # EtaSq()
 library("lsr")        # cohensD()
+library("sjPlot")     # tab_model()
 # library("sjstats")    # eta_sq()
 ```
 
@@ -54,7 +55,7 @@ Original data set
 
 ```{r, message=FALSE}
 # Load data
-d_allconds <- read_csv("SP13_orig-data_total-errors_long-format.csv")
+d_allconds <- read_csv("data/SP13_orig-data_total-errors_long-format.csv")
 d_allconds$subject <- factor(d_allconds$subject)
 ```
 
@@ -123,7 +124,7 @@ direction as the slope of the thicker lines.
 
 ```{r, include=FALSE}
 # Create a png version to add in the paper:
-ggsave("fig_original_results.png",
+ggsave("myfigures/fig_original_results.png",
        plot_orig + theme(text = element_text(size=18)),
        width = 4.5, height = 3)
 ```
@@ -396,6 +397,13 @@ Model summary and interpretation
 
 ```{r}
 summary(bfm_binom)
+```
+
+Or with a prettier and somewhat simplified layout (note effects are converted to 
+odd-ratios):
+
+```{r}
+tab_model(bfm_binom)
 ```
 
 
