@@ -1,0 +1,137 @@
+---
+title: "Estimate frequency effects"
+author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
+date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+output:
+  html_document:
+    depth: 2
+    number_sections: yes
+    theme: default
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Introduction
+============
+
+In this report we estimate the size of frequency effects based on pilot data.
+
+*NB*:
+
+- Pilot data were collected in June 2018 and do *not* include the critical
+movement manipulations. 
+- Participants instead performed the memory task in the "control" condition
+(see SP13)
+- We manipulated the time a word was displayed (see `word_duration` in data frame
+below).
+- Participants were 17 L2 speakers of English (with L1 Swedish)
+- The task was carried out in English (L2)
+
+
+Set up workspace
+===============
+
+## Libraries
+
+```{r, message=FALSE}
+library("tidyverse")
+library("knitr")
+library("lme4")
+```
+
+
+## Data
+
+```{r, message=FALSE}
+# Load pilot data
+pd <- read_csv("data/data_pilot_memory-task_long.csv") %>%
+  rename(subj = participant,
+         trial_in_block = trial,
+         word_in_trial = wordInTrial)
+# Add error column for consistency with SP13
+pd$Error <- ifelse(pd$correct == 1, 0, 1)
+# head(pd)
+# Unique word_durations (note ISI was kept constant at 400 ms)
+unique(pd[, c("word_duration", "SOA")]) %>% arrange(word_duration)
+# Load frequency data from SUBTLEX-US; downloaded on 2019-09-16 from
+# https://www.ugent.be/pp/experimentele-psychologie/en/research/documents/subtlexus/subtlexus4.zip
+# For an explanation of column names, see
+# https://www.ugent.be/pp/experimentele-psychologie/en/research/documents/subtlexus
+freq <- read_csv("data/verbs_pilot_freq.csv")
+# Join data file with frequency, but only Log10(WF)
+pd <- left_join(pd, freq %>% rename(verb = Word) %>% select(verb, Lg10WF))
+pd %>% head %>% kable
+```
+
+Frequency effect
+=================
+
+Quick plot
+----------
+
+Plot average accuracy against log(word-frequency):
+
+```{r}
+pd %>%
+  group_by(verb, Lg10WF) %>%
+  summarise(Acc = mean(Error)) %>%
+  ggplot(aes(x = Lg10WF, y = Acc)) +
+  geom_point() +
+  ylab("Mean error rate") +
+  geom_smooth(method = "lm")
+```
+
+
+Variation in Log(WF)
+--------------------
+
+How much variation in log frequency is there in the verbs we used for the pilot?
+
+```{r}
+ggplot(freq, aes(x = Lg10WF)) + geom_histogram()
+```
+
+
+
+Fit logistic GLMM
+-----------------
+
+Standardize or centre predictors:
+
+```{r}
+myscale <- function(x, ...) {as.vector(scale(x, ...))}
+pd$Lg10WF_z <- myscale(pd$Lg10WF)
+pd$Lg10WF_c <- myscale(pd$Lg10WF, scale = FALSE)  # only centre for comparability
+pd$block_z <- myscale(pd$block)
+pd$word_duration_z <- myscale(pd$word_duration)
+pd$trial_in_block_z <- myscale(pd$trial_in_block)
+pd$type <- factor(pd$type)
+contrasts(pd$type) <- contr.sum(2)
+pd$word_in_trial_z <- myscale(pd$word_in_trial)
+pd %>% head %>% kable
+```
+
+
+```{r}
+fm <- glmer(
+  Error ~ Lg10WF_z + type + block_z + word_duration_z + trial_in_block_z +
+    word_in_trial_z +
+    (1 | subj) + (1 | verb),
+  data = pd, family = "binomial"
+)
+summary(fm)
+```
+
+```{r}
+fm_freq_unscaled <- glmer(
+  Error ~ Lg10WF_c + type + block_z + word_duration_z + trial_in_block_z +
+    word_in_trial_z +
+    (1 | subj) + (1 | verb),
+  data = pd, family = "binomial"
+)
+summary(fm_freq_unscaled)
+```
