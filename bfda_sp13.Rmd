@@ -14,13 +14,15 @@ output:
 Introduction
 ============
 
-This script carries out a number of Bayes factor design analyses (BFDA) based on
-the framework laid out in Schönbrodt and Wagenmakers (2017, *Psychon Bull Rev*).
-All BFDA apply to our intended replication of Shebani and Pulvermüller 
-(2013, *Cortex*), henceforth SP13.
+This knitr script executes and reports the Bayes factor design analyses (BFDA) 
+for our replication of Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
+All simulations are done in the framework laid out in Schönbrodt and Wagenmakers
+(2017, *Psychon Bull Rev*), and implemented using the `BFDA` package (Schönbrodt
+& Stefan, 2018; https://github.com/nicebread/BFDA).
+See end of document for session info, including package versions, etc.
 
-What differs between the BFDAs are the assumptions we make about a) effect size
-and b) the type of test we will carry out. See details below.
+This document complements our manuscript submitted as a Registered Report to
+*Cortex*. See the manuscript for further context.
 
 
 Setup workspace
@@ -35,22 +37,30 @@ library("knitr")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("boot")       # for inv.logit()
 library("BFDA")
-library("sjPlot")     # tab_model()
 library("brms")
 ```
 
 
-Load model fitted on original data and posterior for the interaction effect:
+Load model fitted on original data:
 
 ```{r, message=FALSE}
 # Binomial GLMM of the original data (fitted with brms); see script 
 # "reanalysis_original.Rmd"
 bfm_binom <- readRDS("sims_etc/bayes_glmm_default.rds")
-# Load posterior estimates for the critical interaction effect from the brms
-# model (read from file and convert to vector):
-beta_post <- read_csv("sims_etc/beta_posterior.csv") %>%
-  pull(1)
 ```
+
+*brms* has a `posterior_samples(x, pars)` function to get posterior traces for
+specific coefficients. We pass our fitted *brms* model as x, and the predictor
+of interest as pars, and obtain a dataframe with the samples in return.
+This posterior from the original we can then use as the prior for the Bayes 
+factor design analysis (BFDA) in our replication.
+
+```{r}
+# Extract posterior estimates for the critical interaction effect from the brms
+# model (pull converts it to a numerical vector):
+beta_posterior <- pull(posterior_samples(bfm_binom, "movementarm_vs_leg:word_typearm_vs_leg"))
+```
+
 
 Convenience function:
 
@@ -58,11 +68,22 @@ Convenience function:
 # Wrapper function to display the results of the simulation:
 results_sim <- function(sim, pow = FALSE, bound = c(1/6, 6)) {
   print(BFDA.analyze(sim, design = "sequential", boundary = c(1/6, 6)))
-  plot(sim, boundary = bound)  # pass argument when it crashes with default
+  plot(sim, boundary = bound)  # pass argument if it crashes with default
   if (pow) { SSD(sim, power=.9, boundary=c(1/6, 6)) }
 }
 ```
 
+
+Some notes on the simulations below
+===================================
+
+1. For each set of simulations below, we simulated 10 000 studies (`B = 10000`),
+which is the recommendation by the package authors (see 
+[BFDA manual](https://rawgit.com/nicebread/BFDA/master/package/doc/BFDA_manual.html))
+2. Running these simulations often takes a long time (from a few minutes to a few
+hours on a laptop). Here and below we have run the simulations once and saved
+them to disk so that they can simply be loaded when running this script. To run
+them anew, please uncomment the relevant code snippets.
 
 
 BFDA using effect size and analysis reported in the original study
@@ -193,12 +214,14 @@ Same as above.
 BFDA based on ANOVA as in original study and $d$ converted from $\eta^2$
 =======================================================================
 
-When we re-analyze the data with an ANOVA and convert the $\eta^2$ of the
-interaction to Cohen's $d$ (using the online converter REF), we obtain an effect
-size of Cohen's $d = 0.41$ (see `reanalysis_original.html`).
+We are not able to reproduce the effect size reported in SP13 (see 
+`reanalysis_original.html`).
+When we re-analyze the data with an ANOVA (as in the original) and convert the
+$\eta^2$ of the interaction to Cohen's $d$, we obtain an effect size of Cohen's
+$d = 0.41$ (see `reanalysis_original.html`).
 
-Next we run simulations based on this effect size ($d = 0.4$), again using a
-paired t-test.
+We therefoew next run simulations based on this effect size ($d = 0.4$), again
+using a paired t-test.
 
 
 Simulate hypothetical studies
@@ -231,7 +254,7 @@ sim_H1_d_04_defPrior
 ## Under H1
 
 ```{r, warning=FALSE}
-results_sim(sim_H1_d_04_defPrior, T)
+results_sim(sim_H1_d_04_defPrior, FALSE)
 ```
 
 
@@ -253,7 +276,7 @@ Analyzing the error data using ANOVAs (or t-tests), as the authors did,
 violates some of the assumptions of those models.
 A better statistical analysis is to treat the errors participants made as
 arising from a binomial distribution. In order to additionally capture 
-subject-level variability, we can use Generalized Linear Mixed Models (GLMMs).
+subject-level variability, we used Generalized Linear Mixed Models (GLMMs).
 
 
 Re-analysis of the original data with a binomial GLMM
@@ -274,12 +297,6 @@ This is the output of this model:
 summary(bfm_binom)
 ```
 
-Or with a prettier and somewhat simplified layout (note effects are converted to 
-odd-ratios):
-
-```{r}
-tab_model(bfm_binom)
-```
 
 
 ### Presence of an interaction effect
