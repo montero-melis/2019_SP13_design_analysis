@@ -1,6 +1,6 @@
 # Function to simulate (hypothetical) binomially distributed data for the SP13
 # replication. This will then be the input to our analysis pipeline script.
-# It is called/sourced from the script "generate_data.R"
+# It is called/sourced from a separate script.
 
 library("mvtnorm")
 library("tidyverse")
@@ -15,7 +15,7 @@ library("boot")  # for inv.logit()
 
 # For power analyses:
 # The function can also be used for simulation-based power analyses. Step 3b
-# is very important in that regard, so uncomment if necessary. What it does:
+# is important in that regard. Here is what it does by default:
 # Rather than sampling *all* fixed effects coefficients from the covariance
 # matrix, step 3b keeps the effect of the critical interaction constant
 # by plugging the intended interaction effect back in (see step 3b). This makes
@@ -25,7 +25,9 @@ library("boot")  # for inv.logit()
 # (The relevant discussion is found in email correspondence with Florian
 # (see e-mail sent by Jaeger, Florian <fjaeger@UR.Rochester.edu>; Subj: "Re:
 # Pragmatic advice on power analysis to determine sample size for conceptual
-# replication", sent on Sat 2018-10-13 04:46)
+# replication", sent on Sat 2018-10-13 04:46).
+# To sample the critical effect from the estimated distribution, set the
+# parameter 'keep_critical_effect_constant' to FALSE
 
 simulate_binom <- function (
   Nsubj  = 2,  # Number of participants
@@ -34,6 +36,7 @@ simulate_binom <- function (
   fixef_sigma,        # covariance matrix for fixed effects (diagonals contain SE^2)
   ranef_sigma_subj,   # covariance matrix for random effects by subject
   ranef_sigma_item,   # covariance matrix for random effects by item
+  keep_critical_effect_constant = TRUE,  # see comment in paragraph above
   full_output = TRUE,      # Output list with fixef/ranef dfs in addition to data?
   print_each_step = FALSE  # print output at each step to unveil inner workings
   ) {
@@ -63,11 +66,43 @@ simulate_binom <- function (
   myprint(myfactors)
 
   # 2) Create data frame that will contain the simulated data
+  # 2a) Basic structure
+  n_obs <- Nsubj * Nitem * 2  # total number of observations (or #rows)
   data <- tidyr::expand(myfactors, movement, word_type, subject = 1 : Nsubj) %>%
     slice(rep(1 : n(), each = Nitem / 2)) %>%  # Multiply rows by half the item number
     select(subject, movement, word_type) %>%   # Reorder columns
     arrange(subject, movement, word_type) %>%  # Rearrange rows
-    mutate(item = rep(1 : Nitem, times = 2 * Nsubj))  # Ss see each item twice (once per block)
+    mutate(
+      item  = rep(1 : Nitem, times = 2 * Nsubj),  # Ss see each item twice (once per block)
+      block = rep(c(1, 2, 2, 1), each = Nitem, length.out = n_obs)  # counterbalanced movement blocks
+           )
+  myprint(data)
+  # 2b) Randomization of items
+  data <- data %>%
+    # group items randomly into trials (4 word per trial)
+    group_by(subject, word_type, block) %>%
+    mutate(sequence = base::sample.int(Nitem / 2)) %>%  # shuffle items
+    arrange(subject, movement, word_type, sequence) %>%
+    ungroup() %>%
+    mutate(
+      trialID = rep(1 : (Nitem / 4), each = 4, length.out = n_obs),  # identify trials
+      pos_in_trial = rep(1 : 4, length.out = n_obs)  # position of word in trial
+      ) %>%
+    # shuffle trials randomly within blocks
+    nest(-subject, - block, -trialID) %>%
+    group_by(subject, block) %>%
+    mutate(trial_in_block = base::sample.int(Nitem / 4)) %>%
+    # But because we want "trial_in_exp" (not in block), we have to add #trials in block 1 to trials in block 2
+    mutate(
+      block_correction = ifelse(block == 1, 0, Nitem / 4),
+      trial_in_exp = trial_in_block + block_correction
+      ) %>%
+    unnest()
+  myprint(data)
+  # Remove interim columns not necessary in the output
+  data <- data %>%
+    select(-trialID, -trial_in_block, -block_correction, -sequence) %>%
+    arrange(subject, movement, trial_in_exp, pos_in_trial)
   myprint(data)
 
   # 3) Fixed effects in this simulation
@@ -80,9 +115,9 @@ simulate_binom <- function (
     sigma = fixef_sigma  # covariance of fixed effects
     )
   myprint(fixef)
-  # # 3b) But now plug the intended coefficient for the interaction back in.
-  # fixef[4] <- fixef_means[4]
-  # myprint(fixef)
+  # 3b) Plug the intended coefficient for the interaction back in (by default).
+  if (keep_critical_effect_constant) { fixef[4] <- fixef_means[4] }
+  myprint(fixef)
   # 3c) Save fixed effects as df for output
   fixef_df <- tibble(coef = colnames(fixef), betas = fixef[1, ])
   myprint(fixef_df)
@@ -162,6 +197,22 @@ simulate_binom <- function (
   myprint(data)
   # 5b) and generate an actual observed binary response
   data$Error <- rbinom(n = nrow(data), size = 1, prob = data$prob)
+
+  # 6) Add nuisance variable "preced_error" (binary) which is 1 if an error
+  # was made on any of the preceding words in a trial, 0 otherwise
+  prec_error <- function(x) {
+    cumsum <- cumsum(x)
+    shift_cumsum <- c(0, cumsum[1 : (length(cumsum) - 1)])
+    out <- ifelse(shift_cumsum > 0, 1, 0)
+    out
+  }
+  data <- data %>%
+    group_by(subject, trial_in_exp) %>%
+    mutate(preced_error = prec_error(Error))
+
+  # reorder columns
+  data <- data %>%
+    select(subject : pos_in_trial, preced_error, Error, LO_fixef : prob)
 
   # out
   if (! full_output) {
