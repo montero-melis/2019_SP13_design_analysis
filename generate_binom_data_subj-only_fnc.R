@@ -194,7 +194,8 @@ simulate_binom <- function (
   myprint(data)
   # 5b) and generate an actual observed binary response
   # data$Error <- rbinom(n = nrow(data), size = 1, prob = data$prob)
-  data$Errors <- rbinom(n = nrow(data), size = 48, prob = data$prob)
+  data$errors <- rbinom(n = nrow(data), size = 48, prob = data$prob)
+  data$n <- 48  # maximal possible number of errors per experimental cell
 
   # # 6) Add nuisance variable "preced_error" (binary) which is 1 if an error
   # # was made on any of the preceding words in a trial, 0 otherwise
