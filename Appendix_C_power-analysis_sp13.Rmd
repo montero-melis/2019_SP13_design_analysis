@@ -1,0 +1,397 @@
+---
+title: "Appendix C: Power analysis for SP13 replication"
+author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
+date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+output:
+  html_document:
+    depth: 2
+    number_sections: yes
+    theme: default
+    toc: yes
+---
+
+
+Introduction
+============
+
+This knitr script executes and reports a power analysis for our replication of
+Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
+
+Data simulations are based on our re-analysis of the original data as shared by
+SP13. Since that data set did not consist of trial-level observations, we do not
+have a way to estimate item variability from it. We assume a generative model
+for the simulations with subjects as the only random effects factor, including
+both by-subject random intercepts and slopes for all the fixed effects (see 
+model specification below).
+
+We adopt the following approach for our power analysis, which really is a type
+of Bayes factor design analysis (see Schönbrodt and Wagenmakers, 2017, 
+*Psychon Bull Rev*):
+
+1. Simulate random data from the statistical model fitted to the original data.
+2. Fit two logisic mixed models to the data using `lme4`, one that includes the
+   interaction of interest and another that does not.
+3. Compute a Bayes factor for the two models based on the Bayesian information
+   criterion (BIC) (see 
+   [this link](https://rpubs.com/lindeloev/bayes_factors) for the exact approach).
+4. Repeat steps 1-3 a large number of times for different sample sizes.
+
+This document complements our manuscript submitted as a Registered Report to
+*Cortex*. See end of document for session info, including package versions, etc.
+and the manuscript for further context.
+
+
+Justification of BIC approach
+-----------------------------
+
+There is a practical reason we do not run simulations using the fully Bayesian
+approach we will use for our main analysis:
+It takes roughly 2 hours to run each analysis of a simulated data set using
+`brms` and bridge sampling (as implemented in our analysis pipeline, see
+[Appendix_E_analysis_pipeline](https://github.com/montero-melis/2019_SP13-replication_reg-report/blob/master/Appendix_E_analysis_pipeline.html)).
+If we used this approach to simulate 1000 data sets for six different Ns, it
+would take approximately 
+$6 \times 1000 \times 2 = 12000$ hours
+or a little more than *one year and four months* to run the simulations.
+Our approach is a compromise that allows for a good enough estimation of Bayes
+factors taking into account the specifics of our design as opposed to 
+off-the-shelve R packages like `BFDA` (Schönbrodt & Stefan, 2018).
+
+
+Setup workspace
+===============
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library("knitr")
+library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
+library("boot")       # for inv.logit()
+library("lme4")
+library("tictoc")
+```
+
+
+```{r}
+# Load original data from SP13
+d <- read_csv("data/SP13_orig-data_total-errors_long-format.csv") %>%
+  # keep critical interference conditions only
+  filter(movement %in% c("arm_paradi", "leg_paradi"))
+# For each experimental cell, the maximum number of errors is 48 (see
+# "Appendix_B_reanalysis_original.Rmd" for justification0)
+d$n <- 48
+```
+
+
+Fit model to original data
+==========================
+
+Contrast coding for factors:
+
+```{r}
+# movement condition
+d$mv <- factor(d$movement)
+contrasts(d$mv) <- contr.sum(2)
+colnames(contrasts(d$mv)) <- "Arm_Leg"
+contrasts(d$mv)
+# word type
+d$wt <- factor(d$word_type)
+contrasts(d$wt) <- contr.sum(2)
+colnames(contrasts(d$wt)) <- "ArmW_LegW"
+contrasts(d$wt)
+```
+
+
+Maximal radom effect structure
+------------------------------
+
+Fit binomial mixed model on original data, with maximal random effect structure:
+
+```{r}
+fm_max <- glmer(
+  cbind(errors, n - errors) ~ 1 + mv * wt +
+    (1 + mv * wt | subject),
+  data = d, 
+  family = "binomial"
+  )
+summary(fm_max)
+```
+
+
+Set correlation parameters to zero for all random effects
+-----------------------------------------------------
+
+The following code fits a model in which all correlation terms between random
+effects are set to zero, following Phillip Alday's recommendation. The problem
+is that then the by-subject random variance for the critical interaction is
+estimated to be zero. Therefore I don't use this simplified model for the
+simulations, but the maximal above.
+
+```{r}
+# Simple double-bar syntax doesn't do the trick, so use numeric values from design
+# matrix. Based on Reinhold Kliegl's post: https://rpubs.com/Reinhold/391071
+head(model.matrix(fm_max), 4)
+c_mvA_L <- model.matrix(fm_max)[, 2]
+c_wtA_L <- model.matrix(fm_max)[, 3]
+c_mv_wt <- model.matrix(fm_max)[, 4]
+# Fit using double-bar syntax:
+fm_nocorr <- glmer(
+  cbind(errors, n - errors) ~ 1 + mv * wt +
+    (1 + c_mvA_L + c_wtA_L + c_mv_wt || subject),
+  data = d, 
+  family = "binomial"
+  )
+summary(fm_nocorr)
+```
+
+
+Power simulations
+=================
+
+Prepare data generating process
+-------------------------------
+
+### Load function
+
+Load the **function** that generates binomial data aggregated by subject
+([this one](https://github.com/montero-melis/2019_SP13_design_analysis/blob/master/generate_binom_data_subj-only_fnc.R)).
+
+```{r}
+source("generate_binom_data_subj-only_fnc.R")
+```
+
+
+### Set up simulation parameters
+
+The output from the model fit to the original data serves as input to the function.
+We need to put them into the right format:
+
+```{r}
+# Fixed effects
+# Vector of coefficient means
+fixef_means <- summary(fm_max)$coef[, 1]
+fixef_means
+
+# Covariance matrix (Sigma); we need to square the SEs to convert them to Variances
+fixef_sigma <- diag(summary(fm_max)$coef[, 2] ^ 2)  # we assume uncorrelated diagonal matrix
+fixef_sigma
+
+# Random effects by subject:
+VarCorr(fm_max)
+# The variances of the random effects are the diagonals of the covariance matrix
+# Strange syntax, but the first call to diag extracts the diagonal, the second
+# transforms it into a matrix with 0s on the off-diagonal:
+ranef_sigma_subj <- diag(diag(VarCorr(fm_max)$subject))
+ranef_sigma_subj
+```
+
+
+### Example simulation
+
+We can now call the `simulate_binom` function to generate data:
+
+```{r, message = FALSE}
+sim_ex <- simulate_binom(
+  Nsubj = 2,
+  fixef_means = fixef_means,
+  fixef_sigma = fixef_sigma,
+  ranef_sigma_subj = ranef_sigma_subj
+  )
+sim_ex
+```
+
+
+Functions to analyze each simulation
+--------------------------------
+
+### Basic function
+
+```{r}
+analyze_simulation <- function(
+  df,
+  print_model_summaries = FALSE
+  ) {
+
+  # Get the coding scheme right:
+  contrasts(df$movement) <- contr.sum(2)
+  contrasts(df$word_type) <- contr.sum(2)
+  # function to catch convergence issues
+  converge <- function (fm) {
+    message <- summary(fm)$optinfo$conv$lme4$messages
+    if( is.null(message) ) { "" } else { message }
+  }
+
+  ## Model fitting:
+  
+  # 1) Models with maximal random effects:
+  # with critical interaction
+  fm_max_full <-  glmer(
+    cbind(errors, n - errors) ~ movement * word_type + (1 + movement * word_type | subject),
+    data = df, family = "binomial"
+    )
+  # Without fixef interaction term:
+  fm_max_null <- update(fm_max_full, formula = ~ . - movement : word_type)
+  
+  # 2) Models with by-subject random intercept only:
+  # with critical interaction
+  fm_interc_full <-  glmer(
+    cbind(errors, n - errors) ~ movement * word_type + (1 | subject),
+    data = df, family = "binomial"
+  )
+  # Without fixef interaction term:
+  fm_interc_null <- update(fm_interc_full, formula = ~ . - movement : word_type)
+  
+  # BICs to Bayes factor (see https://rpubs.com/lindeloev/bayes_factors):
+  BF_BIC_max <- exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2)
+  BF_BIC_interc <- exp( (BIC(fm_interc_null) - BIC(fm_interc_full) ) / 2)
+
+  # Sanity check
+  if (print_model_summaries) {
+    print(summary(fm_max_full))
+    # print(summary(fm_max_null))
+    print(summary(fm_interc_full))
+    # print(summary(fm_interc_null))
+    }
+
+  # relevant output to data frame
+  out <- data.frame(
+    BF_BIC_max = BF_BIC_max,
+    z_effect_max = summary(fm_max_full)$coef[4, 3],
+    conv_max_null = converge(fm_max_null),
+    conv_max_full = converge(fm_max_full),
+    BF_BIC_interc = BF_BIC_interc,
+    z_effect_interc = summary(fm_interc_full)$coef[4, 3],
+    conv_interc_null = converge(fm_interc_null),
+    conv_interc_full = converge(fm_interc_full),
+    stringsAsFactors = FALSE
+  )
+  out
+}
+```
+
+
+### Example
+
+The output is a one-row data frame with information about the analysis:
+
+```{r, message=FALSE}
+sim_ex <-  simulate_binom(
+  Nsubj = 20,
+  fixef_means = fixef_means,
+  fixef_sigma = fixef_sigma,
+  ranef_sigma_subj = ranef_sigma_subj
+  )
+analyze_simulation(sim_ex)
+```
+
+
+If called with `print_model_summaries = TRUE` it also prints the model summaries
+to screen.
+
+```{r, message=FALSE, warning=FALSE}
+analyze_simulation(sim_ex, print_model_summaries = TRUE)
+```
+
+
+### Function to analyze many data sets
+
+```{r}
+# Function to analyze many data sets, called with pmap
+sim_many <- function(rseed, sim_id, ...) {
+  set.seed(rseed)
+  df <- simulate_binom(...)
+  result <- analyze_simulation(df)
+  result$sim_id <- sim_id
+  result
+}
+```
+
+
+
+### Generate and analyze data sets
+
+Number of simulations for each N:
+
+```{r}
+nb_sims <- 20  # number of simulations per N
+```
+
+
+Data frame of simulation parameters called with `purrr::pmap`
+
+```{r}
+params <- tibble(Nsubj = c(50, 100))
+params <- params[rep(1 : nrow(params), each = nb_sims), ]
+params$rseed <- sample.int(10 ^ 9, size = nrow(params))
+params$sim_id <- seq_len(nrow(params))
+head(params, 4)
+tail(params, 4)
+```
+
+Run the simulations:
+
+```{r, message=FALSE, warning=FALSE}
+tictoc::tic()
+mysims <- pmap(
+  .l = params,
+  .f = sim_many,
+  # fixed parameters (for clarity, comment out the ones we pass through params)
+  # Nsubj =,
+  fixef_means = fixef_means,
+  fixef_sigma = fixef_sigma,
+  ranef_sigma_subj = ranef_sigma_subj
+  ) %>%
+  bind_rows()
+tictoc::toc()
+
+# Merge back the info about the parameters that generated each simulation.
+mysims <- left_join(mysims, params)
+head(mysims)
+```
+
+Save results to disk
+
+```{r}
+# write_csv(mysims, "sims/power_simulation_results.csv")
+```
+
+
+Summary of results
+
+```{r}
+by(mysims$BF_BIC_max, mysims$Nsubj, summary)
+by(mysims$BF_BIC_interc, mysims$Nsubj, summary)
+# ggplot(mysims, aes(x = log10(BF_BIC))) + geom_histogram() + facet_grid(Nsubj ~ .)
+```
+
+
+Full results:
+
+```{r}
+mysims
+```
+
+
+
+Conclusion (Revise this!!!)
+==========
+
+Our proposed design with $N_{min}=60$ and $N_{max}=96$ (step size = 12) and the
+evidence threshold set at $BF_{10} > 6$ or $BF_{01} > 6$ will largely suffice to
+guarantee high power (>90%) if the effect was as strong as reported in the
+original study. 
+Taking into account, however, that a) our re-analysis of the original data suggests
+that the effect size might have been severely over-estimated, and b) the
+original ANOVA-based analysis seem inappropriate for the data at hand, we have
+chosen a design that will also guarantee  a high probability of compelling
+evidence using an improved analysis method and with a small-to-medium effect size.
+
+
+Session info
+============
+
+```{r}
+sessionInfo()
+```
