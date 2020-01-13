@@ -14,6 +14,8 @@ output:
 Introduction
 ============
 
+**[ADD: BY-TRIAL DATA; ITEM VARIANCE ESTIMATE FROM PILOT]**
+
 This knitr script executes and reports a power analysis for our replication of
 Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
 
@@ -68,6 +70,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, message=FALSE}
 library("knitr")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
+library("broom")
 library("boot")       # for inv.logit()
 library("lme4")
 library("tictoc")
@@ -104,7 +107,7 @@ contrasts(d$wt)
 ```
 
 
-Maximal radom effect structure
+Maximal random effect structure
 ------------------------------
 
 Fit binomial mixed model on original data, with maximal random effect structure:
@@ -147,6 +150,13 @@ summary(fm_nocorr)
 ```
 
 
+Estimates for item-level random variability
+-------------------------------
+
+[TAKEN FROM THE PILOT DATA...]
+
+
+
 Power simulations
 =================
 
@@ -159,7 +169,7 @@ Load the **function** that generates binomial data aggregated by subject
 ([this one](https://github.com/montero-melis/2019_SP13_design_analysis/blob/master/generate_binom_data_subj-only_fnc.R)).
 
 ```{r}
-source("generate_binom_data_subj-only_fnc.R")
+source("generate_data_fnc.R")
 ```
 
 
@@ -187,6 +197,19 @@ ranef_sigma_subj <- diag(diag(VarCorr(fm_max)$subject))
 ranef_sigma_subj
 ```
 
+An estimate for random effects by item we take from our pilot data (see
+[here](https://github.com/montero-melis/2018_replication_sheb-pulv2013/blob/master/1806_pilot_analysis/item-variance_estimates.R)).
+
+
+```{r}
+# We don't have estimates for by-item random slope for movement; we will assume
+# it to be the same as the by-subject random variability for the critical
+# interaction, which probably is an overestimate but will make our power
+# estimates more conservative
+ranef_sigma_item <- diag(c(0.65, 0.06)) ^ 2  # square to obtain variances
+ranef_sigma_item
+```
+
 
 ### Example simulation
 
@@ -195,27 +218,42 @@ We can now call the `simulate_binom` function to generate data:
 ```{r, message = FALSE}
 sim_ex <- simulate_binom(
   Nsubj = 2,
+  Nitem = 8,
   fixef_means = fixef_means,
   fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj
+  ranef_sigma_subj = ranef_sigma_subj,
+  ranef_sigma_item = ranef_sigma_item
   )
 sim_ex
 ```
 
+If we set `full_output = TRUE`, the output is a list that contains additional
+information about the fixed and random effects in the simulation:
 
-Functions to analyze each simulation
+
+```{r, message = FALSE}
+simulate_binom(
+  Nsubj = 2,
+  Nitem = 8,
+  fixef_means = fixef_means,
+  fixef_sigma = fixef_sigma,
+  ranef_sigma_subj = ranef_sigma_subj,
+  ranef_sigma_item = ranef_sigma_item,
+  full_output = TRUE
+  )
+```
+
+
+Functions to analyze simulations
 --------------------------------
 
 ### Basic function
 
 ```{r}
-analyze_simulation <- function(
-  df,
-  print_model_summaries = FALSE
-  ) {
+analyze_simulation <- function(df, print_model_summaries = FALSE) {
 
   # Get the coding scheme right:
-  contrasts(df$movement) <- contr.sum(2)
+  contrasts(df$movement)  <- contr.sum(2)
   contrasts(df$word_type) <- contr.sum(2)
   # function to catch convergence issues
   converge <- function (fm) {
@@ -223,51 +261,44 @@ analyze_simulation <- function(
     if( is.null(message) ) { "" } else { message }
   }
 
-  ## Model fitting:
-  
-  # 1) Models with maximal random effects:
+  # Fit models with maximal random effects:
   # with critical interaction
   fm_max_full <-  glmer(
-    cbind(errors, n - errors) ~ movement * word_type + (1 + movement * word_type | subject),
-    data = df, family = "binomial"
-    )
-  # Without fixef interaction term:
-  fm_max_null <- update(fm_max_full, formula = ~ . - movement : word_type)
-  
-  # 2) Models with by-subject random intercept only:
-  # with critical interaction
-  fm_interc_full <-  glmer(
-    cbind(errors, n - errors) ~ movement * word_type + (1 | subject),
+    Error ~ movement * word_type +
+      (1 | subject) +
+      (1 | item),
+      # (1 + movement * word_type | subject) +
+      # (1 + movement | item),
     data = df, family = "binomial"
   )
   # Without fixef interaction term:
-  fm_interc_null <- update(fm_interc_full, formula = ~ . - movement : word_type)
-  
-  # BICs to Bayes factor (see https://rpubs.com/lindeloev/bayes_factors):
-  BF_BIC_max <- exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2)
-  BF_BIC_interc <- exp( (BIC(fm_interc_null) - BIC(fm_interc_full) ) / 2)
+  fm_max_null <- update(fm_max_full, formula = ~ . - movement : word_type)
 
   # Sanity check
   if (print_model_summaries) {
     print(summary(fm_max_full))
-    # print(summary(fm_max_null))
-    print(summary(fm_interc_full))
-    # print(summary(fm_interc_null))
-    }
-
-  # relevant output to data frame
-  out <- data.frame(
-    BF_BIC_max = BF_BIC_max,
-    z_effect_max = summary(fm_max_full)$coef[4, 3],
-    conv_max_null = converge(fm_max_null),
-    conv_max_full = converge(fm_max_full),
-    BF_BIC_interc = BF_BIC_interc,
-    z_effect_interc = summary(fm_interc_full)$coef[4, 3],
-    conv_interc_null = converge(fm_interc_null),
-    conv_interc_full = converge(fm_interc_full),
-    stringsAsFactors = FALSE
-  )
-  out
+    print(summary(fm_max_null))
+  }
+  
+  # Put fixed effect model coefficients into one data frame
+  model_info <- bind_rows(
+    unnest(tidy(fm_max_full )%>% filter(group == "fixed")) %>%
+      mutate(model = "full", convergence = converge(fm_max_full)),
+    unnest(tidy(fm_max_null )%>% filter(group == "fixed")) %>% 
+      mutate(
+        model = "null", convergence = converge(fm_max_null))
+    ) %>%
+  # Now add more concise info (redundantly repeated across rows, can be filtered
+  # out later):
+    mutate(
+      BIC_full = BIC(fm_max_full),
+      BIC_null = BIC(fm_max_null),
+      BF_BIC = exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2),
+      conv_max_full = converge(fm_max_full),
+      conv_max_null = converge(fm_max_null)
+      ) %>%
+    select(-group)
+  model_info
 }
 ```
 
@@ -276,14 +307,19 @@ analyze_simulation <- function(
 
 The output is a one-row data frame with information about the analysis:
 
-```{r, message=FALSE}
+```{r, message=FALSE, warning=FALSE}
 sim_ex <-  simulate_binom(
   Nsubj = 20,
+  Nitem = 40,
   fixef_means = fixef_means,
   fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj
+  ranef_sigma_subj = ranef_sigma_subj,
+  ranef_sigma_item = ranef_sigma_item,
   )
-analyze_simulation(sim_ex)
+tictoc::tic()
+an_ex <- analyze_simulation(sim_ex)
+tictoc::toc()
+an_ex
 ```
 
 
@@ -291,7 +327,7 @@ If called with `print_model_summaries = TRUE` it also prints the model summaries
 to screen.
 
 ```{r, message=FALSE, warning=FALSE}
-analyze_simulation(sim_ex, print_model_summaries = TRUE)
+# analyze_simulation(sim_ex, print_model_summaries = TRUE)
 ```
 
 
@@ -310,12 +346,12 @@ sim_many <- function(rseed, sim_id, ...) {
 
 
 
-### Generate and analyze data sets
+### Run the simulations (generate and analyze data sets)
 
 Number of simulations for each N:
 
 ```{r}
-nb_sims <- 20  # number of simulations per N
+nb_sims <- 5  # number of simulations per N
 ```
 
 
@@ -339,39 +375,78 @@ mysims <- pmap(
   .f = sim_many,
   # fixed parameters (for clarity, comment out the ones we pass through params)
   # Nsubj =,
+  Nitem = 104,
   fixef_means = fixef_means,
   fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj
+  ranef_sigma_subj = ranef_sigma_subj,
+  ranef_sigma_item = ranef_sigma_item
   ) %>%
   bind_rows()
 tictoc::toc()
+```
 
+```{r}
 # Merge back the info about the parameters that generated each simulation.
-mysims <- left_join(mysims, params)
+mysims <- left_join(mysims, params) %>%
+  # rearrange columns
+  select(sim_id : rseed, term : conv_max_null)
 head(mysims)
+head(mysims) %>% kable
 ```
 
 Save results to disk
 
 ```{r}
-# write_csv(mysims, "sims/power_simulation_results.csv")
+write_csv(mysims, "sims_etc/power_simulation_results.csv")
 ```
 
+
+Analyze results
+---------------
+
+### Shape of data frame with results
+
+The data frame (tibble) contains a lot of information about the model fitting.
+Mainly it consists of two sets of output:
+
+1) The BIC of the models and corresponding BF_BIC:
+
+```{r}
+sims_BIC <- mysims %>%
+  select(sim_id : rseed, BIC_full : conv_max_null) %>%
+  unique() %>%
+  mutate(any_conv_fail = "" != paste(conv_max_full, conv_max_null, sep = ""))
+sims_BIC %>% head() %>% kable()
+```
+
+2) The fixed effect coefficient estimates of each model (in long format):
+
+```{r}
+sims_coef <- mysims %>%
+  select(sim_id : convergence) %>%
+  unique() 
+sims_coef %>% head() %>% kable()
+```
+
+
+
+### BF_BIC
 
 Summary of results
 
 ```{r}
-by(mysims$BF_BIC_max, mysims$Nsubj, summary)
-by(mysims$BF_BIC_interc, mysims$Nsubj, summary)
-# ggplot(mysims, aes(x = log10(BF_BIC))) + geom_histogram() + facet_grid(Nsubj ~ .)
+by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, any_conv_fail)), summary)
 ```
 
-
-Full results:
 
 ```{r}
-mysims
+ggplot(sims_BIC, aes(x = log(BF_BIC))) + 
+  geom_density() +
+  facet_grid(any_conv_fail ~ Nsubj)
 ```
+
+
+
 
 
 

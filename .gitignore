@@ -3,6 +3,19 @@
 *test.*
 *.png
 
+# html files
+Appendix_C_power-analysis_sp13.html
+frequency_effects.html
+reanalysis_original.html
+
+# folders
+replicBF_verhagen/*
+sims_etc/*
+
+# other
+for-phillip.*
+
+
 ## DEFAULT
 
 # History files

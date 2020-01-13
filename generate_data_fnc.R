@@ -36,8 +36,8 @@ simulate_binom <- function (
   fixef_sigma,        # covariance matrix for fixed effects (diagonals contain SE^2)
   ranef_sigma_subj,   # covariance matrix for random effects by subject
   ranef_sigma_item,   # covariance matrix for random effects by item
-  keep_critical_effect_constant = TRUE,  # see comment in paragraph above
-  full_output = TRUE,      # Output list with fixef/ranef dfs in addition to data?
+  keep_critical_effect_constant = FALSE,  # see comment in paragraph above
+  full_output = FALSE,      # Output list with fixef/ranef dfs in addition to data?
   print_each_step = FALSE  # print output at each step to unveil inner workings
   ) {
 
