@@ -73,6 +73,7 @@ library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("broom")
 library("boot")       # for inv.logit()
 library("lme4")
+library("brms")
 library("tictoc")
 ```
 
@@ -166,7 +167,7 @@ Prepare data generating process
 ### Load function
 
 Load the **function** that generates binomial data aggregated by subject
-([this one](https://github.com/montero-melis/2019_SP13_design_analysis/blob/master/generate_binom_data_subj-only_fnc.R)).
+([this one](https://github.com/montero-melis/2019_SP13_design_analysis/blob/master/generate_data_fnc.R)).
 
 ```{r}
 source("generate_data_fnc.R")
@@ -179,7 +180,9 @@ The output from the model fit to the original data serves as input to the functi
 We need to put them into the right format:
 
 ```{r}
-# Fixed effects
+# The info we need is in the summary of fixed effects of the model:
+summary(fm_max)$coef
+
 # Vector of coefficient means
 fixef_means <- summary(fm_max)$coef[, 1]
 fixef_means
@@ -188,12 +191,11 @@ fixef_means
 fixef_sigma <- diag(summary(fm_max)$coef[, 2] ^ 2)  # we assume uncorrelated diagonal matrix
 fixef_sigma
 
-# Random effects by subject:
+# Random effects for the model:
 VarCorr(fm_max)
-# The variances of the random effects are the diagonals of the covariance matrix
-# Strange syntax, but the first call to diag extracts the diagonal, the second
-# transforms it into a matrix with 0s on the off-diagonal:
-ranef_sigma_subj <- diag(diag(VarCorr(fm_max)$subject))
+# Specifically we extract by-subject random SDs from this matrix (they are stored
+# as a "stddev" attribute of the matrix) and square them to obtain variances:
+ranef_sigma_subj <- diag(attributes(VarCorr(fm_max)$subject)$stddev) ^ 2
 ranef_sigma_subj
 ```
 
@@ -204,7 +206,7 @@ An estimate for random effects by item we take from our pilot data (see
 ```{r}
 # We don't have estimates for by-item random slope for movement; we will assume
 # it to be the same as the by-subject random variability for the critical
-# interaction, which probably is an overestimate but will make our power
+# interaction, which probably is an overestimate but should make our power
 # estimates more conservative
 ranef_sigma_item <- diag(c(0.65, 0.06)) ^ 2  # square to obtain variances
 ranef_sigma_item
@@ -252,12 +254,16 @@ Functions to analyze simulations
 ```{r}
 analyze_simulation <- function(df, print_model_summaries = FALSE) {
 
+  # start counter
+  tic()
+
   # Get the coding scheme right:
   contrasts(df$movement)  <- contr.sum(2)
   contrasts(df$word_type) <- contr.sum(2)
   # function to catch convergence issues
   converge <- function (fm) {
-    message <- summary(fm)$optinfo$conv$lme4$messages
+    # Paste in case there are several messages
+    message <- paste(summary(fm)$optinfo$conv$lme4$messages, collapse = " / ")
     if( is.null(message) ) { "" } else { message }
   }
 
@@ -265,10 +271,10 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
   # with critical interaction
   fm_max_full <-  glmer(
     Error ~ movement * word_type +
-      (1 | subject) +
-      (1 | item),
       # (1 + movement * word_type | subject) +
       # (1 + movement | item),
+      (1 | subject) +
+      (1 | item),
     data = df, family = "binomial"
   )
   # Without fixef interaction term:
@@ -279,25 +285,29 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
     print(summary(fm_max_full))
     print(summary(fm_max_null))
   }
-  
+
   # Put fixed effect model coefficients into one data frame
   model_info <- bind_rows(
     unnest(tidy(fm_max_full )%>% filter(group == "fixed")) %>%
       mutate(model = "full", convergence = converge(fm_max_full)),
-    unnest(tidy(fm_max_null )%>% filter(group == "fixed")) %>% 
+    unnest(tidy(fm_max_null )%>% filter(group == "fixed")) %>%
       mutate(
         model = "null", convergence = converge(fm_max_null))
-    ) %>%
-  # Now add more concise info (redundantly repeated across rows, can be filtered
-  # out later):
+  ) %>%
+    # Now add more concise info (redundantly repeated across rows, can be filtered
+    # out later):
     mutate(
       BIC_full = BIC(fm_max_full),
       BIC_null = BIC(fm_max_null),
       BF_BIC = exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2),
       conv_max_full = converge(fm_max_full),
       conv_max_null = converge(fm_max_null)
-      ) %>%
+    ) %>%
     select(-group)
+  # Add the time it took
+  mytoc <- toc()
+  model_info$t_ellapsed <- mytoc$toc - mytoc$tic
+
   model_info
 }
 ```
@@ -316,10 +326,10 @@ sim_ex <-  simulate_binom(
   ranef_sigma_subj = ranef_sigma_subj,
   ranef_sigma_item = ranef_sigma_item,
   )
-tictoc::tic()
-an_ex <- analyze_simulation(sim_ex)
-tictoc::toc()
-an_ex
+# tictoc::tic()
+# an_ex <- analyze_simulation(sim_ex)
+# tictoc::toc()
+# an_ex
 ```
 
 
@@ -335,11 +345,18 @@ to screen.
 
 ```{r}
 # Function to analyze many data sets, called with pmap
-sim_many <- function(rseed, sim_id, ...) {
+sim_many <- function(rseed, sim_id, Nsubj, ...) {
   set.seed(rseed)
-  df <- simulate_binom(...)
+  df <- simulate_binom(Nsubj, ...)
   result <- analyze_simulation(df)
   result$sim_id <- sim_id
+  result$rseed <- rseed
+  result$Nsubj <- Nsubj
+  write_csv(
+    result,
+    path = "sims_etc/power_simulation_results_append.csv",
+    # col_names = TRUE,
+    append = TRUE)
   result
 }
 ```
@@ -348,17 +365,13 @@ sim_many <- function(rseed, sim_id, ...) {
 
 ### Run the simulations (generate and analyze data sets)
 
-Number of simulations for each N:
+Create a data frame of simulation parameters later called with `purrr::pmap`:
 
 ```{r}
-nb_sims <- 5  # number of simulations per N
-```
-
-
-Data frame of simulation parameters called with `purrr::pmap`
-
-```{r}
-params <- tibble(Nsubj = c(50, 100))
+# Number of simulations per N:
+nb_sims <- 90
+# How many different Ns?
+params <- tibble(Nsubj = c(15, 50, 100))
 params <- params[rep(1 : nrow(params), each = nb_sims), ]
 params$rseed <- sample.int(10 ^ 9, size = nrow(params))
 params$sim_id <- seq_len(nrow(params))
@@ -369,39 +382,43 @@ tail(params, 4)
 Run the simulations:
 
 ```{r, message=FALSE, warning=FALSE}
-tictoc::tic()
-mysims <- pmap(
-  .l = params,
-  .f = sim_many,
-  # fixed parameters (for clarity, comment out the ones we pass through params)
-  # Nsubj =,
-  Nitem = 104,
-  fixef_means = fixef_means,
-  fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj,
-  ranef_sigma_item = ranef_sigma_item
-  ) %>%
-  bind_rows()
-tictoc::toc()
+# tictoc::tic()
+# mysims <- pmap(
+#   .l = params,
+#   .f = sim_many,
+#   # fixed simulation parameters (for clarity, comment out the ones passed through params)
+#   # Nsubj =,
+#   Nitem = 104,
+#   fixef_means = fixef_means,
+#   fixef_sigma = fixef_sigma,
+#   ranef_sigma_subj = ranef_sigma_subj,
+#   ranef_sigma_item = ranef_sigma_item
+#   ) %>%
+#   bind_rows()
+# tictoc::toc()
+# # Save results to disk (but really the more important data set is
+# # "power_simulation_results_append.csv for which each simulation is added after
+# # it's run.)
+# write_csv(mysims, "sims_etc/power_simulation_results.csv")
 ```
 
+Load results from disk if already run and show output of simulations:
+
 ```{r}
-# Merge back the info about the parameters that generated each simulation.
-mysims <- left_join(mysims, params) %>%
-  # rearrange columns
-  select(sim_id : rseed, term : conv_max_null)
+# mysims <- read_csv("sims_etc/power_simulation_results.csv")
+# This version of the file keeps stacking the result of simulations onto each
+# other, so better use this one:
+mysims <- read_csv("sims_etc/power_simulation_results_append.csv")
+# Rearrange columns
+mysims <- mysims %>%
+  select(sim_id : Nsubj, t_ellapsed, term : conv_max_null)
 head(mysims)
-head(mysims) %>% kable
-```
-
-Save results to disk
-
-```{r}
-write_csv(mysims, "sims_etc/power_simulation_results.csv")
+tail(mysims) %>% kable(digits = 2)
 ```
 
 
-Analyze results
+
+Analyze results -- intercept-only models
 ---------------
 
 ### Shape of data frame with results
@@ -413,10 +430,14 @@ Mainly it consists of two sets of output:
 
 ```{r}
 sims_BIC <- mysims %>%
-  select(sim_id : rseed, BIC_full : conv_max_null) %>%
+  select(sim_id : t_ellapsed, BIC_full : conv_max_null) %>%
   unique() %>%
-  mutate(any_conv_fail = "" != paste(conv_max_full, conv_max_null, sep = ""))
-sims_BIC %>% head() %>% kable()
+  mutate(
+    no_conv_fail = ("" == paste(conv_max_full, conv_max_null, sep = "")) | 
+      (is.na(conv_max_full) & is.na(conv_max_null))
+    )
+write_csv(sims_BIC, "sims_etc/power_simulation_results_BIC.csv")
+sims_BIC %>% tail() %>% kable(digits = 2)
 ```
 
 2) The fixed effect coefficient estimates of each model (in long format):
@@ -424,10 +445,27 @@ sims_BIC %>% head() %>% kable()
 ```{r}
 sims_coef <- mysims %>%
   select(sim_id : convergence) %>%
-  unique() 
-sims_coef %>% head() %>% kable()
+  unique() %>%
+  mutate(converged = is.na(convergence) | convergence == "")
+write_csv(sims_coef, "sims_etc/power_simulation_results_coefs.csv")
+sims_coef %>% head() %>% kable(digits = 2)
 ```
 
+
+### Basics
+
+Any repeated random seeds?
+
+```{r}
+nrow(sims_BIC) - length(unique(sims_BIC$rseed))
+```
+
+
+Number of simulations:
+
+```{r}
+with(sims_BIC, addmargins(table(Nsubj, no_conv_fail)))
+```
 
 
 ### BF_BIC
@@ -435,19 +473,428 @@ sims_coef %>% head() %>% kable()
 Summary of results
 
 ```{r}
-by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, any_conv_fail)), summary)
+by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, no_conv_fail)), summary)
 ```
 
 
 ```{r}
-ggplot(sims_BIC, aes(x = log(BF_BIC))) + 
+ggplot(sims_BIC, aes(x = no_conv_fail, y = log10(BF_BIC))) + 
+  geom_boxplot() +
+  geom_jitter(height = 0) +
+  facet_grid(. ~ Nsubj) +
+  xlab("Both models converged")
+```
+
+```{r}
+ggplot(sims_BIC, aes(x = log10(BF_BIC))) + 
   geom_density() +
-  facet_grid(any_conv_fail ~ Nsubj)
+  facet_grid(no_conv_fail ~ Nsubj)
+```
+
+
+### Significance of critical coefficients
+
+Summary of z-values for critical interaction (in full models):
+
+```{r}
+sims_coef %>%
+  filter(term == "movement1:word_type1") %>%
+  select(statistic) %>%
+  pull %>%
+  summary
+```
+
+
+```{r}
+sims_coef %>%
+  filter(term == "movement1:word_type1") %>%
+  ggplot(aes(x = converged, y = statistic)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0) +
+  facet_grid(. ~ Nsubj) +
+  geom_hline(yintercept = 2, linetype = "dashed") +
+  xlab("Model converged")
+```
+
+
+Analyze results -- models with maximal RE structure
+---------------
+
+Load appropriate models now
+
+```{r}
+# mysims <- read_csv("sims_etc/power_simulation_results.csv")
+# This version of the file keeps stacking the result of simulations onto each
+# other, so better use this one:
+mysims_max <- read_csv("sims_etc/power_simulation_results_append_maxREs.csv")
+# Rearrange columns
+mysims_max <- mysims_max %>%
+  select(sim_id : Nsubj, t_ellapsed, term : conv_max_null)
+head(mysims_max)
+tail(mysims_max) %>% kable(digits = 2)
+```
+
+### Shape of data frame with results
+
+The data frame (tibble) contains a lot of information about the model fitting.
+Mainly it consists of two sets of output:
+
+1) The BIC of the models and corresponding BF_BIC:
+
+```{r}
+sims_BIC_max <- mysims_max %>%
+  select(sim_id : t_ellapsed, BIC_full : conv_max_null) %>%
+  unique() %>%
+  mutate(
+    no_conv_fail = ("" == paste(conv_max_full, conv_max_null, sep = "")) | 
+      (is.na(conv_max_full) & is.na(conv_max_null))
+    )
+# write_csv(sims_BIC_max, "sims_etc/power_simulation_results_BIC.csv")
+sims_BIC_max %>% tail() %>% kable(digits = 2)
+```
+
+2) The fixed effect coefficient estimates of each model (in long format):
+
+```{r}
+sims_coef_max <- mysims_max %>%
+  select(sim_id : convergence) %>%
+  unique() %>%
+  mutate(converged = is.na(convergence) | convergence == "")
+# write_csv(sims_coef_max, "sims_etc/power_simulation_results_coefs.csv")
+sims_coef_max %>% head() %>% kable(digits = 2)
+```
+
+
+### Basics
+
+Any repeated random seeds?
+
+```{r}
+nrow(sims_BIC_max) - length(unique(sims_BIC_max$rseed))
+```
+
+
+Number of simulations:
+
+```{r}
+with(sims_BIC_max, addmargins(table(Nsubj, no_conv_fail)))
+```
+
+
+### BF_BIC
+
+Summary of results
+
+```{r}
+by(sims_BIC_max$BF_BIC, with(sims_BIC_max, list(Nsubj, no_conv_fail)), summary)
+```
+
+
+```{r}
+ggplot(sims_BIC_max, aes(x = no_conv_fail, y = log10(BF_BIC))) + 
+  geom_boxplot() +
+  geom_jitter(height = 0) +
+  facet_grid(. ~ Nsubj) +
+  xlab("Both models converged")
+```
+
+```{r}
+ggplot(sims_BIC_max, aes(x = log10(BF_BIC))) + 
+  geom_density() +
+  facet_grid(no_conv_fail ~ Nsubj)
+```
+
+
+### Significance of critical coefficients
+
+Summary of z-values for critical interaction (in full models):
+
+```{r}
+sims_coef_max %>%
+  filter(term == "movement1:word_type1") %>%
+  select(statistic) %>%
+  pull %>%
+  summary
+```
+
+
+```{r}
+sims_coef_max %>%
+  filter(term == "movement1:word_type1") %>%
+  ggplot(aes(x = converged, y = statistic)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0) +
+  facet_grid(. ~ Nsubj) +
+  geom_hline(yintercept = 2, linetype = "dashed") +
+  ylab("z-statistic") +
+  xlab("Model converged")
+```
+
+```{r}
+sims_coef_max %>%
+  filter(term == "movement1:word_type1") %>%
+  ggplot(aes(x = converged, y = estimate)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0) +
+  facet_grid(. ~ Nsubj) +
+  geom_hline(yintercept = 0.1356, linetype = "dashed") +
+  ylab("Estimate") +
+  xlab("Model converged")
+```
+
+
+Comparison of methods -- why are BF_BICs so high?
+================================================
+
+BFs based on BICs are humongous. Is it a consequence of the specific method
+to compute these BFs?
+
+First, let's compare the BICs obtained from the maximal REs models and the
+intercept-only models:
+
+```{r}
+# Intercept only
+by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, no_conv_fail)), summary)
+# Maximal
+by(sims_BIC_max$BF_BIC, with(sims_BIC_max, list(Nsubj, no_conv_fail)), summary)
+```
+
+
+Approach
+--------
+
+Let's take one generated data set and analyze it using three methods:
+
+1. Intercept only `lme4` model
+2. Maximal REs `lme4` model
+3. Maximal REs `brms` model and bridge sampling to obtain BFs (as we will do in
+our actual data set)
+
+The data set
+-----------
+
+Take a data set that doesn't fail to converge for N=100 and is around the median:
+
+```{r}
+sims_BIC_max %>%
+  filter(no_conv_fail == TRUE & Nsubj == 100) %>%
+  arrange(BF_BIC) %>%
+  kable
+```
+
+We take simulation 29 with a BF of around a billion.
+
+```{r}
+set.seed(158912513)
+df_sim <- simulate_binom(
+  Nsubj = 100,
+  Nitem = 104,
+  fixef_means = fixef_means,
+  fixef_sigma = fixef_sigma,
+  ranef_sigma_subj = ranef_sigma_subj,
+  ranef_sigma_item = ranef_sigma_item
+  )
+df_sim
+```
+
+
+Adjust coding scheme:
+
+```{r}
+# Get the coding scheme right:
+contrasts(df_sim$movement)  <- contr.sum(2)
+contrasts(df_sim$movement)
+contrasts(df_sim$word_type) <- contr.sum(2)
+contrasts(df_sim$word_type)
 ```
 
 
 
 
+Analyze with 3 methods
+----------------------
+
+### Intercepts only lme4
+
+```{r}
+# fm_interc_full <-  glmer(
+#   Error ~ movement * word_type +
+#     # (1 + movement * word_type | subject) +
+#     # (1 + movement | item),
+#     (1 | subject) +
+#     (1 | item),
+#   data = df_sim, family = "binomial"
+# )
+# # Without fixef interaction term:
+# fm_interc_null <- update(fm_interc_full, formula = ~ . - movement : word_type)
+```
+
+BICs and BIC-based BF:
+
+```{r}
+# BIC(fm_interc_full)
+# BIC(fm_interc_null)
+# # BF
+# exp( (BIC(fm_interc_null) - BIC(fm_interc_full) ) / 2)
+```
+
+Model summaries
+
+```{r}
+# summary(fm_interc_null)
+# summary(fm_interc_full)
+```
+
+
+### Maximal lme4
+
+```{r}
+# tic()
+# fm_max_full <-  glmer(
+#   Error ~ movement * word_type +
+#     (1 + movement * word_type | subject) +
+#     (1 + movement | item),
+#     # (1 | subject) +
+#     # (1 | item),
+#   data = df_sim, family = "binomial"
+# )
+# toc()
+# tic()
+# # Without fixef interaction term:
+# fm_max_null <- update(fm_max_full, formula = ~ . - movement : word_type)
+# toc()
+```
+
+BICs and BIC-based BF:
+
+```{r}
+# BIC(fm_max_full)
+# BIC(fm_max_null)
+# # BF
+# exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2)
+```
+
+Model summaries
+
+```{r}
+# summary(fm_max_null)
+# summary(fm_max_full)
+```
+
+
+### Maximal with brms
+
+```{r}
+# myprior <- set_prior("normal(0, 2)", class = "b")
+# print(myprior)
+# # Model *without* interaction [took 3.3h]
+# tic()
+# bfm_null <- brm(
+#   Error ~
+#     1 + movement + word_type +  # critical manipulations but no interaction
+#     (1 + movement * word_type | subject) + (1 + movement | item),  # maximal random structure
+#   data = df_sim,
+#   prior = myprior,
+#   family = "bernoulli",
+#   iter = 15000, warmup = 2000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
+#   save_all_pars = TRUE  # necessary for brms::bayes_factor() later
+# )
+# toc()
+# # fit full model (with interaction):
+# tic()
+# bfm_full <- brm(
+#   Error ~
+#     1 + movement * word_type +  # critical manipulations and interaction
+#     (1 + movement * word_type | subject) + (1 + movement | item),  # maximal random structure
+#   data = df_sim,
+#   prior = myprior ,
+#   family = "bernoulli",
+#   iter = 15000, warmup = 2000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
+#   save_all_pars = TRUE  # necessary for brms::bayes_factor() later
+# )
+# toc()
+```
+
+```{r}
+# summary(bfm_null)
+# summary(bfm_full)
+```
+
+
+BF using bridge sampling:
+
+```{r}
+# BF_bfm <- brms::bayes_factor(bfm_full, bfm_null)
+# BF_bfm
+```
+
+
+### Save it all to disk
+
+```{r}
+# model_list <- list(
+#   fm_interc_null, fm_interc_full, fm_max_null, fm_max_full, 
+#   bfm_null, bfm_null, BF_bfm
+#   )
+# # write_rds(model_list, path = "sims_etc/model_compare_158912513.Rda")
+```
+
+
+Compare the three methods
+------------------------
+
+```{r}
+model_list1 <- read_rds("sims_etc/model_compare_158912513.Rda")
+model_list2 <- read_rds("sims_etc/model_compare_189941429.Rda")
+```
+
+
+Function
+
+```{r}
+compare_models_BIC <- function (model_list) {
+
+  p <- function(x) print(x)
+
+  p("fm_interc_null")
+  p(BIC(model_list[[1]]))
+  p("fm_interc_full")
+  p(BIC(model_list[[2]]))
+  p("BIC_BF")
+  p(exp( (BIC(model_list[[1]]) - BIC(model_list[[2]]) ) / 2))
+  cat("\n")
+
+  p("fm_max_null")
+  p(BIC(model_list[[3]]))
+  p("fm_max_full")
+  p(BIC(model_list[[4]]))
+  p("BIC_BF")
+  p(exp( (BIC(model_list[[3]]) - BIC(model_list[[4]]) ) / 2))
+  cat("\n")
+
+  p("BF bridge sampling with brms model")
+  p(model_list[[7]])
+}
+
+model_summaries <- function(model_list) {
+  p <- function(x) print(x)
+  p(summary(model_list[[2]]))
+  p(summary(model_list[[3]]))
+  p(summary(model_list[[4]]))
+  p(summary(model_list[[6]]))
+}
+```
+
+
+
+
+```{r}
+compare_models_BIC(model_list1)
+compare_models_BIC(model_list2)
+
+# model_summaries(model_list1)
+model_summaries(model_list2)
+```
 
 
 Conclusion (Revise this!!!)
