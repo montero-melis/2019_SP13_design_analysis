@@ -434,11 +434,27 @@ except that it does not contain the interaction between Movement and Word type:
 # saveRDS(bfm_binom_nointeract, "sims_etc/bayes_glmm_normprior_nointeract.rds")
 ```
 
+Fit also the maximal model (maximal RE structure):
+
+```{r}
+# bfm_binom_max <- brm(
+#   errors | trials(n) ~ 1 + movement * word_type + (1 + movement * word_type | subject),
+#   data = d,
+#   prior = myprior,
+#   family = "binomial",
+#   iter = 10000, warmup = 1000, chains = 4,  # https://discourse.mc-stan.org/t/bayes-factor-using-brms/4469/3
+#   save_all_pars = TRUE
+#   )
+# saveRDS(bfm_binom_max, "sims_etc/bayes_glmm_normprior_interact_max.rds")
+```
+
+
 
 ```{r}
 # Load models from disk:
 bfm_binom <- readRDS("sims_etc/bayes_glmm_normprior_interact.rds")
 bfm_binom_nointeract <- readRDS("sims_etc/bayes_glmm_normprior_nointeract.rds")
+bfm_binom_max <- readRDS("sims_etc/bayes_glmm_normprior_interact_max.rds")
 ```
 
 ```{r}
@@ -451,6 +467,8 @@ prior_summary(bfm_binom)
 Model summary and interpretation
 ------------------------------
 
+Intercept only:
+
 ```{r}
 summary(bfm_binom)
 ```
@@ -461,6 +479,18 @@ converted to odd-ratios!):
 ```{r}
 tab_model(bfm_binom)
 ```
+
+Maximal RE:
+
+```{r}
+summary(bfm_binom_max)
+```
+
+```{r, fig.height=7}
+plot(bfm_binom_max)
+```
+
+
 
 
 **Interpretation (backtransforming to odds)**:

@@ -420,7 +420,12 @@ sim_till_aim <- function(aim, filter_out = 0) {
     filter( (! Nsubj %in% filter_out))
   sims
 }
-# Simulations needed to get to an aim
+```
+
+Example:
+
+```{r, message=FALSE}
+# Estimated nnumber of simulations needed to get to an aim
 sim_till_aim(1000)
 # Filter out simulations with sample size 15 and 60
 sim_till_aim(1000, c(15, 60))
@@ -457,9 +462,10 @@ run_till_aim <- function(aim, ...) {
 
 Check and run!
 
-```{r}
-sim_till_aim(100)
-# run_till_aim(100, filter_out = c(15))
+```{r, message=FALSE}
+sim_till_aim(750)
+sim_till_aim(1000, filter_out = c(15))
+# run_till_aim(750, filter_out = c(15))
 ```
 
 
@@ -530,6 +536,18 @@ with(sims_BIC, addmargins(table(Nsubj, converged)))
 ```
 
 
+Percentage where both full and null model converged:
+
+```{r}
+sims_BIC %>%
+  group_by(Nsubj) %>%
+  summarise(run = n(), converged = sum(converged)) %>%
+  mutate(prop_converged = converged / run) %>%
+  kable(digits = 2)
+```
+
+
+
 ### BF_BIC
 
 Summary of results
@@ -552,12 +570,21 @@ sims_BIC %>%
 ```
 
 
+```{r}
+sims_BIC %>%
+  mutate(BF6 = BF_BIC >= 6) %>%
+  group_by(converged, Nsubj) %>%
+  summarise(power_percent = 100 * mean(BF6)) %>%
+  kable(digits = 1)
+```
+
 
 ```{r}
 ggplot(sims_BIC, aes(x = converged, y = log10(BF_BIC))) + 
   geom_boxplot() +
-  geom_jitter(height = 0) +
+  geom_jitter(height = 0, alpha = .15) +
   facet_grid(. ~ Nsubj) +
+  geom_hline(yintercept = log10(6), linetype = "dashed") +
   xlab("Both models converged")
 ```
 
@@ -586,7 +613,7 @@ sims_coef %>%
   filter(term == "mv_wt") %>%
   ggplot(aes(x = converged, y = statistic)) + 
   geom_boxplot() +
-  geom_jitter(height = 0) +
+  geom_jitter(height = 0, alpha = .15) +
   facet_grid(. ~ Nsubj) +
   geom_hline(yintercept = 2, linetype = "dashed") +
   xlab("Model converged")
@@ -600,7 +627,7 @@ sims_coef %>%
   filter(term == "mv_wt") %>%
   ggplot(aes(x = converged, y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0) +
+  geom_jitter(height = 0, alpha = .15) +
   facet_grid(. ~ Nsubj) +
   geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
   ylab("Estimate") +
@@ -615,7 +642,7 @@ sims_coef %>%
   filter(term == "sd_mv_wt.subject") %>%
   ggplot(aes(x = converged, y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0) +
+  geom_jitter(height = 0, alpha = .15) +
   facet_grid(. ~ Nsubj) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed") +
   ylab("Estimate") +
@@ -627,7 +654,7 @@ sims_coef %>%
   filter(term == "sd_(Intercept).subject.3") %>%
   ggplot(aes(x = converged, y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0) +
+  geom_jitter(height = 0, alpha = .15) +
   facet_grid(. ~ Nsubj) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed") +
   ylab("Estimate") +
@@ -660,10 +687,10 @@ The data set
 Take a data set that doesn't fail to converge for N=100 and is around the median:
 
 ```{r}
-sims_BIC %>%
-  filter(converged == TRUE & Nsubj == 96) %>%
-  arrange(BF_BIC) %>%
-  kable
+# sims_BIC %>%
+#   filter(converged == TRUE & Nsubj == 96) %>%
+#   arrange(BF_BIC) %>%
+#   kable
 ```
 
 We take simulation 29 with a BF of around a billion.
