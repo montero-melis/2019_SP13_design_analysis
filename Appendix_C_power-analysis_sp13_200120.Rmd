@@ -532,7 +532,7 @@ nrow(sims_BIC) - length(unique(sims_BIC$rseed))
 Number of simulations:
 
 ```{r}
-with(sims_BIC, addmargins(table(Nsubj, converged)))
+with(sims_BIC, addmargins(table(Nsubj, converged, sim_type)))
 ```
 
 
@@ -540,7 +540,7 @@ Percentage where both full and null model converged:
 
 ```{r}
 sims_BIC %>%
-  group_by(Nsubj) %>%
+  group_by(Nsubj, sim_type) %>%
   summarise(run = n(), converged = sum(converged)) %>%
   mutate(prop_converged = converged / run) %>%
   kable(digits = 2)
@@ -553,7 +553,7 @@ sims_BIC %>%
 Summary of results
 
 ```{r}
-by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, converged)), summary)
+by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, sim_type, converged)), summary)
 ```
 
 Power:
@@ -561,11 +561,11 @@ Power:
 ```{r}
 sims_BIC %>%
   mutate(BF6 = BF_BIC >= 6) %>%
-  group_by(Nsubj, converged) %>%
+  group_by(Nsubj, converged, sim_type) %>%
   summarise(power = mean(BF6)) %>%
   ggplot(aes(x = converged, y = power)) +
   geom_bar(stat = "identity") +
-  facet_grid(. ~ Nsubj) +
+  facet_grid(sim_type ~ Nsubj) +
   geom_hline(yintercept = .9)
 ```
 
@@ -573,7 +573,7 @@ sims_BIC %>%
 ```{r}
 sims_BIC %>%
   mutate(BF6 = BF_BIC >= 6) %>%
-  group_by(converged, Nsubj) %>%
+  group_by(converged, sim_type, Nsubj) %>%
   summarise(power_percent = 100 * mean(BF6)) %>%
   kable(digits = 1)
 ```
@@ -583,15 +583,15 @@ sims_BIC %>%
 ggplot(sims_BIC, aes(x = converged, y = log10(BF_BIC))) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = .15) +
-  facet_grid(. ~ Nsubj) +
+  facet_grid(sim_type ~ Nsubj) +
   geom_hline(yintercept = log10(6), linetype = "dashed") +
   xlab("Both models converged")
 ```
 
 ```{r}
-ggplot(sims_BIC, aes(x = log10(BF_BIC))) + 
+ggplot(sims_BIC %>% filter(converged == TRUE), aes(x = log10(BF_BIC))) + 
   geom_density() +
-  facet_grid(converged ~ Nsubj)
+  facet_grid(sim_type ~ Nsubj)
 ```
 
 
@@ -611,10 +611,10 @@ sims_coef %>%
 ```{r}
 sims_coef %>%
   filter(term == "mv_wt") %>%
-  ggplot(aes(x = converged, y = statistic)) + 
+  ggplot(aes(x = sim_type, y = statistic)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = .15) +
-  facet_grid(. ~ Nsubj) +
+  facet_grid(converged ~ Nsubj) +
   geom_hline(yintercept = 2, linetype = "dashed") +
   xlab("Model converged")
 ```
@@ -625,10 +625,10 @@ Estimates of the critical interaction:
 ```{r}
 sims_coef %>%
   filter(term == "mv_wt") %>%
-  ggplot(aes(x = converged, y = estimate)) + 
+  ggplot(aes(x = sim_type, y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = .15) +
-  facet_grid(. ~ Nsubj) +
+  facet_grid(converged ~ Nsubj) +
   geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
   ylab("Estimate") +
   xlab("Model converged")

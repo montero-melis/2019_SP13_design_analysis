@@ -12,6 +12,10 @@ reanalysis_original.html
 replicBF_verhagen/*
 sims_etc/*
 
+# (typically) large files
+*.rds
+
+
 # other
 for-phillip.*
 
