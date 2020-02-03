@@ -8,6 +8,9 @@ Appendix_C_power-analysis_sp13.html
 frequency_effects.html
 reanalysis_original.html
 
+# Any html file should not be tracked by default
+*.html
+
 # folders
 replicBF_verhagen/*
 sims_etc/*
