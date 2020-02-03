@@ -131,12 +131,12 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
 ## ---- message=FALSE, warning=FALSE---------------------------------------
 sim_ex <-  simulate_binom(
   Nsubj = 20,
-  Nitem = 10,
+  Nitem = 16,
   fixef_means = fixef_means,
   fixef_sigma = fixef_sigma,
   ranef_sigma_subj = ranef_sigma_subj,
   ranef_sigma_item = ranef_sigma_item,
-  keep_critical_effect_constant = FALSE  # TRUE turns into Type 1 error analysis
+  type1 = FALSE  # TRUE turns simulations into Type 1 error analysis
   )
 # tictoc::tic()
 # an_ex <- analyze_simulation(sim_ex, print_model_summaries = TRUE)
@@ -151,7 +151,7 @@ sim_ex <-  simulate_binom(
 ## ------------------------------------------------------------------------
 # Function to analyze many data sets, called with pmap
 sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
-  crit_effect_constant <- if (sim_type == "type2") {
+  istype1 <- if (sim_type == "type2") {
     FALSE
     } else if (sim_type == "type1") {
     TRUE
@@ -161,7 +161,7 @@ sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
   set.seed(rseed)
   df <- simulate_binom(
     Nsubj,
-    keep_critical_effect_constant = crit_effect_constant,
+    type1 = istype1,
     ...
     )
   result <- analyze_simulation(df)
@@ -231,7 +231,7 @@ sim_till_aim <- function(aim, filter_out = 0) {
       needed_neg = aim - converged,
       needed = neg2zero(needed_neg)) %>%
     # Estimated convergence rate at different sample sizes
-    left_join(tibble(Nsubj = c(15, 60, 96), conv_rate = c(0.14, 0.39, 0.55))) %>%
+    left_join(tibble(Nsubj = c(15, 60, 96, 102), conv_rate = c(0.14, 0.39, 0.55, 0.6))) %>%
     mutate(nsims = round(needed / conv_rate)) %>%
     filter( (! Nsubj %in% filter_out))
   sims
@@ -240,7 +240,7 @@ sim_till_aim <- function(aim, filter_out = 0) {
 
 ## ---- message=FALSE------------------------------------------------------
 # Estimated nnumber of simulations needed to get to an aim
-sim_till_aim(2)
+sim_till_aim(1004)
 # Filter out simulations with sample size 15 and 60
 sim_till_aim(1000, c(15, 60))
 
@@ -248,7 +248,7 @@ sim_till_aim(1000, c(15, 60))
 ## ------------------------------------------------------------------------
 # Function that checks how many converged simulations there are and runs new
 # ones until aim is reached:
-run_till_aim <- function(aim, ...) {
+run_till_aim <- function(aim, sample_sizes = c(15, 60, 96, 102), ...) {
   tictoc::tic()
   sims <- sim_till_aim(aim, ...)
 
@@ -257,11 +257,12 @@ run_till_aim <- function(aim, ...) {
     # so then run we'll run one of each sample size to get started
     print("Create file and run one type1 and type2 sim for each sample size")
     params <- tibble(
-      rseed = sample.int(10 ^ 9, size = 6),
-      Nsubj = rep(c(15, 60, 96), 2),
-      sim_type = rep(c("type2", "type1"), each = 3),
-      incl_col_names = c(TRUE, rep(FALSE, 5))  # include col names 1st time
+      Nsubj = rep(sample_sizes, each = 2),
+      sim_type = rep(c("type2", "type1"), length.out = 2 * length(sample_sizes))
       )
+    # include col names 1st time
+    params$incl_col_names <- c(TRUE, rep(FALSE, nrow(params) - 1))
+    params$rseed <- sample.int(10 ^ 9, size = nrow(params))  # random seeds
     params$sim_id <- seq_len(nrow(params))
     print("We'll now run:")
     print(params)
@@ -293,9 +294,9 @@ run_till_aim <- function(aim, ...) {
         Nsubj = rep(sims$Nsubj, sims$nsims),
         sim_type = rep(sims$sim_type, sims$nsims),
         incl_col_names = FALSE
-        )
+      )
       params$sim_id <- seq_len(nrow(params))
-      
+
       # Now we can parallelize!
       registerDoParallel(parallel::detectCores())  # use multicore, set to the number of our cores
       foreach (i=1:nrow(params),
@@ -303,7 +304,7 @@ run_till_aim <- function(aim, ...) {
                .export = c(
                  "sim_many", "simulate_binom", "analyze_simulation",
                  "fixef_means", "fixef_sigma", "ranef_sigma_subj", "ranef_sigma_item")) %dopar% {
-                   
+
                    pmap(
                      .l = params[i,],
                      .f = sim_many,
@@ -328,8 +329,8 @@ run_till_aim <- function(aim, ...) {
 ## ---- message=FALSE------------------------------------------------------
 
 
-sim_till_aim(2)
-run_till_aim(2)
+sim_till_aim(200)
+run_till_aim(1)
 
 
 ## ------------------------------------------------------------------------
