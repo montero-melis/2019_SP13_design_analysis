@@ -231,7 +231,7 @@ sim_till_aim <- function(aim, filter_out = 0) {
       needed_neg = aim - converged,
       needed = neg2zero(needed_neg)) %>%
     # Estimated convergence rate at different sample sizes
-    left_join(tibble(Nsubj = c(15, 60, 96, 102), conv_rate = c(0.14, 0.39, 0.55, 0.6))) %>%
+    left_join(tibble(Nsubj = c(15, 60, 96, 102), conv_rate = c(0.14, 0.39, 0.55, 0.56))) %>%
     mutate(nsims = round(needed / conv_rate)) %>%
     filter( (! Nsubj %in% filter_out))
   sims
@@ -330,7 +330,9 @@ run_till_aim <- function(aim, sample_sizes = c(15, 60, 96, 102), ...) {
 
 
 sim_till_aim(200)
-run_till_aim(1)
+sim_till_aim(250, filter_out = 96)
+run_till_aim(250, filter_out = 96)
+# run_till_aim(100)
 
 
 ## ------------------------------------------------------------------------

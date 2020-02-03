@@ -75,6 +75,7 @@ library("boot")       # for inv.logit()
 library("lme4")
 library("brms")
 library("tictoc")
+library("gridExtra")
 ```
 
 ```{r}
@@ -599,6 +600,76 @@ ggplot(sims_BIC %>% filter(converged == TRUE), aes(x = log10(BF_BIC))) +
   geom_density() +
   facet_grid(sim_type ~ Nsubj)
 ```
+
+
+### Plot for paper
+
+```{r}
+plot_sims <- function(type, df = sims_BIC) {
+  d <- sims_BIC %>%
+    filter(sim_type == type, Nsubj %in% c(15, 60, 102), converged == TRUE) %>%
+    select(rseed : Nsubj, BF_BIC) %>%
+    unique() %>%
+    mutate(BF_decision = ifelse(
+      BF_BIC >= 6, "Accept H1", ifelse(
+        BF_BIC <= 1/6, "Accept H0", "Inconclusive"))
+      ) %>%
+    group_by(Nsubj, BF_decision) %>%
+    summarise(count = n()) %>%
+    mutate(perc = count / sum(count))
+  # Assign a bunch of values depending on whether it's type 1 or 2 simulations
+  if (type == "type2") {
+    mylevels <- c("Accept H0", "Inconclusive", "Accept H1")
+    mycolours <- c("#FF3300", "#FFFF33", "#33CC33")
+    mytitle <- "Type 2 simulations / power (effect present)"
+    yinterc <- 0.9
+    } else if (type == "type1") {
+      mylevels <- c("Accept H1", "Inconclusive", "Accept H0")
+      mycolours <- c("#FF3300", "#FFFF33", "#33CC33")
+      mytitle <- "Type 1 simulations (effect absent)"
+      yinterc <- 0.95
+      } else {
+        stop("Invalid argument for type!")
+      }
+  d$BF_decision <- factor(d$BF_decision, levels = mylevels)
+  # Plot it
+  p <- ggplot(d, (aes(x = factor(Nsubj), y = perc, fill = BF_decision))) +
+    geom_bar(stat = "identity") +
+    # Don't drop unused levels
+    scale_fill_manual(values = mycolours, drop = FALSE) +
+    geom_hline(yintercept = yinterc, linetype = "dashed") +
+    xlab("Number of participants") +
+    ylab("Proportion") +
+    labs(fill = "Decision") +
+    ggtitle(mytitle) +
+    theme(legend.position = "bottom")
+  p
+}
+```
+
+```{r, fig.width=8}
+p1 <- plot_sims("type2")
+p2 <- plot_sims("type1")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+In table format:
+
+```{r}
+sims_BIC %>%
+  filter(Nsubj %in% c(15, 60, 102), converged == TRUE) %>%
+  select(rseed : Nsubj, BF_BIC) %>%
+  unique() %>%
+  mutate(BF_decision = ifelse(
+    BF_BIC >= 6, "Accept H1", ifelse(
+      BF_BIC <= 1/6, "Accept H0", "Inconclusive"))
+    ) %>%
+  group_by(sim_type, Nsubj, BF_decision) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = 100 * count / sum(count)) %>%
+  kable(digits = 1)
+```
+
 
 
 ### Significance of critical coefficients
