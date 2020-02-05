@@ -80,7 +80,7 @@ library("gridExtra")
 
 ```{r}
 # Global plotting parameters
-myalpha <- 0.05
+myalpha <- 0.005
 theme_set(theme_bw())
 ```
 
@@ -553,6 +553,16 @@ sims_BIC %>%
   kable(digits = 2)
 ```
 
+By sample size only
+
+```{r}
+sims_BIC %>%
+  group_by(Nsubj) %>%
+  summarise(run = n(), converged = sum(converged)) %>%
+  mutate(prop_converged = converged / run) %>%
+  kable(digits = 2)
+```
+
 
 
 ### BF_BIC
@@ -607,7 +617,7 @@ ggplot(sims_BIC %>% filter(converged == TRUE), aes(x = log10(BF_BIC))) +
 ```{r}
 plot_sims <- function(type, df = sims_BIC) {
   d <- sims_BIC %>%
-    filter(sim_type == type, Nsubj %in% c(15, 60, 102), converged == TRUE) %>%
+    filter(sim_type == type, Nsubj %in% c(15, 60, 108), converged == TRUE) %>%
     select(rseed : Nsubj, BF_BIC) %>%
     unique() %>%
     mutate(BF_decision = ifelse(
@@ -648,8 +658,8 @@ plot_sims <- function(type, df = sims_BIC) {
 ```
 
 ```{r, fig.width=8}
-p1 <- plot_sims("type2")
-p2 <- plot_sims("type1")
+p1 <- plot_sims("type1")
+p2 <- plot_sims("type2")
 grid.arrange(p1, p2, nrow = 1)
 ```
 
@@ -657,7 +667,7 @@ In table format:
 
 ```{r}
 sims_BIC %>%
-  filter(Nsubj %in% c(15, 60, 102), converged == TRUE) %>%
+  filter(Nsubj %in% c(15, 60, 108), converged == TRUE) %>%
   select(rseed : Nsubj, BF_BIC) %>%
   unique() %>%
   mutate(BF_decision = ifelse(
@@ -717,7 +727,7 @@ Estimates of the random by-subject variation for critical effect:
 
 ```{r}
 sims_coef %>%
-  filter(term == "sd_mv_wt.subject") %>%
+  filter(grepl("sd_mv_wt\\.subject", term)) %>%
   ggplot(aes(x = sim_type, y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
@@ -729,7 +739,7 @@ sims_coef %>%
 
 ```{r}
 sims_coef %>%
-  filter(term == "sd_(Intercept).subject.3") %>%
+  filter(grepl("sd_\\(Intercept\\).subject", term)) %>%
   ggplot(aes(x = sim_type, y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +

@@ -17,7 +17,7 @@ sims_etc/*
 
 # (typically) large files
 *.rds
-
+scripts_cluster/power_simulation_results_append*
 
 # other
 for-phillip.*
