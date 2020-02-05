@@ -209,7 +209,11 @@ sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
 
 
 ## ------------------------------------------------------------------------
-sim_till_aim <- function(aim, filter_out = 0) {
+sim_till_aim <- function(
+  aim,
+  filter_out_nsubj = 0,  # by default this will consider all sample sizes
+  filter_out_type = ""   # by default it will do type1 and type2
+  ) {
   neg2zero <- function(x) ifelse(x < 0, 0, x)
   # retrieve simulations and check which ones converged (both null and full)
   if (file.exists("power_simulation_results_append.csv")) {
@@ -231,24 +235,31 @@ sim_till_aim <- function(aim, filter_out = 0) {
       needed_neg = aim - converged,
       needed = neg2zero(needed_neg)) %>%
     # Estimated convergence rate at different sample sizes
-    left_join(tibble(Nsubj = c(15, 60, 96, 102), conv_rate = c(0.14, 0.39, 0.55, 0.56))) %>%
+    left_join(tibble(
+      Nsubj =     c(15,   60,   96,   102,  108),
+      conv_rate = c(0.13, 0.40, 0.55, 0.56, 0.60))
+      ) %>%
     mutate(nsims = round(needed / conv_rate)) %>%
-    filter( (! Nsubj %in% filter_out))
+    filter(
+      (! Nsubj %in% filter_out_nsubj),
+      (sim_type != filter_out_type)
+      )
   sims
 }
 
 
 ## ---- message=FALSE------------------------------------------------------
 # Estimated nnumber of simulations needed to get to an aim
-sim_till_aim(1004)
+sim_till_aim(10000)
 # Filter out simulations with sample size 15 and 60
-sim_till_aim(1000, c(15, 60))
+sim_till_aim(10000, filter_out_nsubj = c(15, 60))
+sim_till_aim(10000, filter_out_nsubj = c(15, 60), filter_out_type = "type2")
 
 
 ## ------------------------------------------------------------------------
 # Function that checks how many converged simulations there are and runs new
 # ones until aim is reached:
-run_till_aim <- function(aim, sample_sizes = c(15, 60, 96, 102), ...) {
+run_till_aim <- function(aim, sample_sizes = c(15, 60, 108), ...) {
   tictoc::tic()
   sims <- sim_till_aim(aim, ...)
 
@@ -329,9 +340,9 @@ run_till_aim <- function(aim, sample_sizes = c(15, 60, 96, 102), ...) {
 ## ---- message=FALSE------------------------------------------------------
 
 
-sim_till_aim(200)
-sim_till_aim(250, filter_out = 96)
-run_till_aim(250, filter_out = 96)
+sim_till_aim(300)
+sim_till_aim(300, filter_out_nsubj = c(96, 102))
+run_till_aim(300, filter_out_nsubj = c(96, 102))
 # run_till_aim(100)
 
 
