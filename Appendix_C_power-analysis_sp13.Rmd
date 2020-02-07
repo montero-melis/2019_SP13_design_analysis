@@ -75,7 +75,8 @@ library("boot")       # for inv.logit()
 library("lme4")
 library("brms")
 library("tictoc")
-library("gridExtra")
+# library("gridExtra")
+library("ggpubr")
 ```
 
 ```{r}
@@ -433,9 +434,9 @@ Example:
 
 ```{r, message=FALSE}
 # Estimated nnumber of simulations needed to get to an aim
-sim_till_aim(1000)
+# sim_till_aim(1000)
 # Filter out simulations with sample size 15 and 60
-sim_till_aim(1000, c(15, 60))
+# sim_till_aim(1000, c(15, 60))
 ```
 
 
@@ -470,9 +471,8 @@ run_till_aim <- function(aim, ...) {
 Check and run!
 
 ```{r, message=FALSE}
-sim_till_aim(750)
-sim_till_aim(1000, filter_out = c(15))
-# run_till_aim(750, filter_out = c(15))
+# sim_till_aim(1000, filter_out = c(15))
+# run_till_aim(1000, filter_out = c(15))
 ```
 
 
@@ -484,7 +484,9 @@ Load results from disk if already run and show output of simulations:
 
 ```{r}
 # This version of the file keeps stacking the result of simulations:
-mysims <- read_csv("sims_etc/power_simulation_results_append.csv")
+# mysims <- read_csv("sims_etc/power_simulation_results_append.csv")
+mysims <- read_csv("sims_etc/power_simulation_results_append_w108_200205.csv") %>%
+  filter(Nsubj %in% c(15, 60, 108))
 # Rearrange columns
 mysims <- mysims %>%
   select(sim_id : Nsubj, t_ellapsed, term : conv_null)
@@ -627,17 +629,18 @@ plot_sims <- function(type, df = sims_BIC) {
     group_by(Nsubj, BF_decision) %>%
     summarise(count = n()) %>%
     mutate(perc = count / sum(count))
+
   # Assign a bunch of values depending on whether it's type 1 or 2 simulations
+  mylevels <- c("Accept H0", "Inconclusive", "Accept H1")
+  # mycolours <- c("#E69F00", "#999999", "#56B4E9")
+  mycolours <- c("#00AFBB", "#E7B800", "#FC4E07")
+
   if (type == "type2") {
-    mylevels <- c("Accept H0", "Inconclusive", "Accept H1")
-    mycolours <- c("#FF3300", "#FFFF33", "#33CC33")
-    mytitle <- "Type 2 simulations / power (effect present)"
+    mytitle <- "Type 2 simulations\n(effect is present)"
     yinterc <- 0.9
     } else if (type == "type1") {
-      mylevels <- c("Accept H1", "Inconclusive", "Accept H0")
-      mycolours <- c("#FF3300", "#FFFF33", "#33CC33")
-      mytitle <- "Type 1 simulations (effect absent)"
-      yinterc <- 0.95
+      mytitle <- "Type 1 simulations\n(effect is absent)"
+      yinterc <- 0.05
       } else {
         stop("Invalid argument for type!")
       }
@@ -660,7 +663,7 @@ plot_sims <- function(type, df = sims_BIC) {
 ```{r, fig.width=8}
 p1 <- plot_sims("type1")
 p2 <- plot_sims("type2")
-grid.arrange(p1, p2, nrow = 1)
+ggarrange(p1, p2, ncol=2, nrow=1, common.legend = TRUE, legend="right")
 ```
 
 In table format:
@@ -702,8 +705,7 @@ sims_coef %>%
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
   facet_grid(converged ~ Nsubj) +
-  geom_hline(yintercept = 2, linetype = "dashed") +
-  xlab("Model converged")
+  geom_hline(yintercept = 2, linetype = "dashed")
 ```
 
 
@@ -718,8 +720,7 @@ sims_coef %>%
   facet_grid(converged ~ Nsubj) +
   geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "blue") +
-  ylab("Estimate") +
-  xlab("Model converged")
+  ylab("Estimate")
 ```
 
 
@@ -733,8 +734,7 @@ sims_coef %>%
   geom_jitter(height = 0, alpha = myalpha) +
   facet_grid(converged ~ Nsubj) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed") +
-  ylab("Estimate") +
-  xlab("Model converged")
+  ylab("Estimate")
 ```
 
 ```{r}
@@ -745,8 +745,7 @@ sims_coef %>%
   geom_jitter(height = 0, alpha = myalpha) +
   facet_grid(converged ~ Nsubj) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed") +
-  ylab("Estimate") +
-  xlab("Model converged")
+  ylab("Estimate")
 ```
 
 
