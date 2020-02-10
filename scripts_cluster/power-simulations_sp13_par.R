@@ -159,16 +159,12 @@ sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
         stop("sim_type has to be either 'type1' or 'type2'")
     }
   set.seed(rseed)
-  df <- simulate_binom(
-    Nsubj,
-    type1 = istype1,
-    ...
-    )
+  df <- simulate_binom(Nsubj, type1 = istype1, ...)
   result <- analyze_simulation(df)
-  result$sim_id <- sim_id
-  result$rseed <- rseed
+  result$sim_id   <- sim_id
+  result$rseed    <- rseed
   result$sim_type <- sim_type
-  result$Nsubj <- Nsubj
+  result$Nsubj    <- Nsubj
   write_csv(
     result,
     path = "power_simulation_results_append.csv",
@@ -340,10 +336,9 @@ run_till_aim <- function(aim, sample_sizes = c(15, 60, 108), ...) {
 ## ---- message=FALSE------------------------------------------------------
 
 
-sim_till_aim(300)
-sim_till_aim(300, filter_out_nsubj = c(96, 102))
-run_till_aim(300, filter_out_nsubj = c(96, 102))
-# run_till_aim(100)
+sim_till_aim(10000)
+sim_till_aim(10000, filter_out_nsubj = c(60, 108))
+run_till_aim(10000, filter_out_nsubj = c(60, 108))
 
 
 ## ------------------------------------------------------------------------

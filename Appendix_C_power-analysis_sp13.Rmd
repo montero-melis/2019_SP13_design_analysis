@@ -14,33 +14,63 @@ output:
 Introduction
 ============
 
-**[ADD: BY-TRIAL DATA; ITEM VARIANCE ESTIMATE FROM PILOT]**
-
 This knitr script executes and reports a power analysis for our replication of
 Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
-
-Data simulations are based on our re-analysis of the original data as shared by
-SP13. Since that data set did not consist of trial-level observations, we do not
-have a way to estimate item variability from it. We assume a generative model
-for the simulations with subjects as the only random effects factor, including
-both by-subject random intercepts and slopes for all the fixed effects (see 
-model specification below).
-
-We adopt the following approach for our power analysis, which really is a type
-of Bayes factor design analysis (see Schönbrodt and Wagenmakers, 2017, 
-*Psychon Bull Rev*):
-
-1. Simulate random data from the statistical model fitted to the original data.
-2. Fit two logisic mixed models to the data using `lme4`, one that includes the
-   interaction of interest and another that does not.
-3. Compute a Bayes factor for the two models based on the Bayesian information
-   criterion (BIC) (see 
-   [this link](https://rpubs.com/lindeloev/bayes_factors) for the exact approach).
-4. Repeat steps 1-3 a large number of times for different sample sizes.
 
 This document complements our manuscript submitted as a Registered Report to
 *Cortex*. See end of document for session info, including package versions, etc.
 and the manuscript for further context.
+
+
+General approach
+---------------
+
+We adopt the following approach for our Bayes factor design analysis (see
+Schönbrodt and Wagenmakers, 2017, *Psychon Bull Rev*):
+
+1. Simulate random data from the statistical model fitted to the original data
+and other parameters estimated from pilot data.
+2. Fit two logisic mixed models to each data set using `lme4`, one that includes
+the interaction of interest and another that does not.
+3. Compute a Bayes factor for the two models based on the Bayesian information
+   criterion (BIC) (see [this link](https://rpubs.com/lindeloev/bayes_factors) 
+   for the exact approach).
+4. Repeat steps 1-3 a large number of times for different sample sizes and for
+a scenario in which the critical effect is zero (Type 1 simulations) and a 
+scenario where the critical effect exists (Type 2 simulations).
+
+
+About the parameters of our statistical model to generate the data
+----------------------------------------
+
+Data simulations are based on our re-analysis of the original data as shared by
+SP13. Since that data set did not consist of trial-level observations, we do not
+have a way to estimate item variability from it.
+We therefore use our own pilot data to estimate item-level variability (details
+below).
+All in all, we assume a generative model for the simulations that mimicks
+our own experimental setup. Each participant generates data for the four
+experimental cells defined by our design:
+
+- Word type: arm words vs leg words
+- Inferference type: arm vs foot paradiddle
+
+There are 104 items (52 arm and 52 leg words) in our study, so we simulate
+208 observations per participant.
+Each data set is randomly generated under a probabilistic binomial (Bernoulli)
+hierarchical model in which the log-odds of producing an error are a function
+of the population-level (fixed) effects predictors Interference Movement
+(arm movements vs. leg movements), Word Type (arm-related vs leg-related words),
+and their interaction. In addition, random effects variance was added by
+participants (for intercepts and all the fixed effects and interaction slopes)
+and items (for intercepts and slopes for Interference Movement). The simulations
+cross the following factors:
+
+1) Participant sample size: N=15, 60, 108; that is, the original sample size, 
+Nmin, and Nmax, respectively.
+2) Simulation type: Type 1 (critical population-level effect set to zero), type 2
+(critical population-level effect sampled from the model of the original data).
+
 
 
 Justification of BIC approach
@@ -51,10 +81,10 @@ approach we will use for our main analysis:
 It takes roughly 2 hours to run each analysis of a simulated data set using
 `brms` and bridge sampling (as implemented in our analysis pipeline, see
 [Appendix_E_analysis_pipeline](https://github.com/montero-melis/2019_SP13-replication_reg-report/blob/master/Appendix_E_analysis_pipeline.html)).
-If we used this approach to simulate 1000 data sets for six different Ns, it
-would take approximately 
-$6 \times 1000 \times 2 = 12000$ hours
-or a little more than *one year and four months* to run the simulations.
+If we used this approach to simulate 10000 data sets for three different Ns, 
+and the two simulation types, it would take approximately 
+$10000 \times 3 \times 2 = 60000$ hours,
+or almost *seven years* to run the simulations.
 Our approach is a compromise that allows for a good enough estimation of Bayes
 factors taking into account the specifics of our design as opposed to 
 off-the-shelve R packages like `BFDA` (Schönbrodt & Stefan, 2018).
@@ -75,7 +105,6 @@ library("boot")       # for inv.logit()
 library("lme4")
 library("brms")
 library("tictoc")
-# library("gridExtra")
 library("ggpubr")
 ```
 
@@ -97,22 +126,10 @@ d$n <- 48
 ```
 
 
-Fit model to original data using `brms`
-==========================
+Model of original data 
+======================
 
-Contrast coding for factors:
-
-```{r}
-# Use numeric coding to fit models without correlation terms from REs
-d$mv <- scale(as.numeric(factor(d$movement)), scale = FALSE) * -2
-d$wt <- scale(as.numeric(factor(d$word_type)), scale = FALSE) * -2
-d$mv_wt <- d$mv * d$wt
-d$subject <- factor(d$subject)
-```
-
-
-`brms` fit
-----------
+The model takes some time to fit with `brms`, so retrieve it from disk:
 
 ```{r}
 # Load from disk - list containing 1) full model, 2) null model, 3) BF
@@ -121,7 +138,7 @@ bfm_max <- read_rds("sims_etc/sp13_bfm_max.rds")
 
 ```{r}
 bfm_full <- bfm_max[[1]]
-# summary(bfm_full)
+summary(bfm_full)
 ```
 
 
@@ -133,36 +150,6 @@ bfm_max[[3]]
 
 
 
-`lme4` fit
-----------
-
-Fit the equivalent `lme4` model:
-
-```{r}
-fm_max_full <- glmer(
-  cbind(errors, n - errors) ~ 1 + mv + wt + mv_wt + (1 + mv + wt + mv_wt | subject),
-  data = d, 
-  family = "binomial"
-  )
-fm_max_null <- update(fm_max_full, formula = ~ . - mv_wt)
-summary(fm_max_full)
-```
-
-
-BF based on BIC:
-
-```{r}
-exp( (BIC(fm_max_null) - BIC(fm_max_full) ) / 2)
-```
-
-
-
-Estimates for item-level random variability
--------------------------------
-
-[TAKEN FROM THE PILOT DATA...]
-
-
 
 Power simulations
 =================
@@ -172,8 +159,7 @@ Prepare data generating process
 
 ### Load function
 
-Load the **function** that generates binomial data aggregated by subject
-([this one](https://github.com/montero-melis/2019_SP13_design_analysis/blob/master/generate_data_fnc.R)).
+Load the **function** that generates binomial data for our design.
 
 ```{r}
 source("generate_data_fnc.R")
@@ -210,10 +196,11 @@ An estimate for random effects by item we take from our pilot data (see
 
 
 ```{r}
-# We don't have estimates for by-item random slope for movement; we will assume
-# it to be the same as the by-subject random variability for the critical
-# interaction, which probably is an overestimate but should make our power
-# estimates more conservative
+# The random by-item intercept is SD=0.65. However, we don't have estimates for
+# by-item random slope for movement because we only ran the control condition in
+# the pilot. We will assume that random slope to be the same as the by-subject
+# random variability for the critical interaction, which is likely to be an
+# overestimate but then it will only make our power estimates more conservative:
 ranef_sigma_item <- diag(c(0.65, 0.06)) ^ 2  # square to obtain variances
 ranef_sigma_item
 ```
@@ -235,21 +222,6 @@ sim_ex <- simulate_binom(
 sim_ex
 ```
 
-If we set `full_output = TRUE`, the output is a list that contains additional
-information about the fixed and random effects in the simulation:
-
-
-```{r, message = FALSE}
-simulate_binom(
-  Nsubj = 2,
-  Nitem = 8,
-  fixef_means = fixef_means,
-  fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj,
-  ranef_sigma_item = ranef_sigma_item,
-  full_output = TRUE
-  )
-```
 
 
 Functions to analyze simulations
@@ -321,9 +293,9 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
 ```
 
 
-### Example
-
-The output is a one-row data frame with information about the analysis:
+Let's illustrate with an example.
+The output is a data frame with information about the analysis of the simulated
+data set:
 
 ```{r, message=FALSE, warning=FALSE}
 sim_ex <-  simulate_binom(
@@ -334,41 +306,179 @@ sim_ex <-  simulate_binom(
   ranef_sigma_subj = ranef_sigma_subj,
   ranef_sigma_item = ranef_sigma_item,
   )
-# tictoc::tic()
-# an_ex <- analyze_simulation(sim_ex, print_model_summaries = TRUE)
-# tictoc::toc()
-# an_ex
+tictoc::tic()
+an_ex <- analyze_simulation(sim_ex, print_model_summaries = TRUE)
+tictoc::toc()
+an_ex
 ```
 
-
-If called with `print_model_summaries = TRUE` it also prints the model summaries
-to screen.
-
-```{r, message=FALSE, warning=FALSE}
-# analyze_simulation(sim_ex, print_model_summaries = TRUE)
-```
 
 
 ### Function to analyze many data sets
 
 ```{r}
-# Function to analyze many data sets, called with pmap
-sim_many <- function(rseed, sim_id, Nsubj, ...) {
+sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
+  istype1 <- if (sim_type == "type2") {
+    FALSE
+    } else if (sim_type == "type1") {
+    TRUE
+    } else{
+        stop("sim_type has to be either 'type1' or 'type2'")
+    }
   set.seed(rseed)
-  df <- simulate_binom(Nsubj, ...)
+  df <- simulate_binom(Nsubj, type1 = istype1, ...)
   result <- analyze_simulation(df)
-  result$sim_id <- sim_id
-  result$rseed <- rseed
-  result$Nsubj <- Nsubj
+  result$sim_id   <- sim_id
+  result$rseed    <- rseed
+  result$sim_type <- sim_type
+  result$Nsubj    <- Nsubj
   write_csv(
     result,
-    path = "sims_etc/power_simulation_results_append.csv",
-    # col_names = TRUE,  # only first time it's run
+    path = "power_simulation_results_append.csv",
+    col_names = incl_col_names,  # only needed first time it's run
     append = TRUE)
   result
 }
 ```
 
+
+### Wrapper function
+
+We need a wrapper function that generates data sets with different simulation
+parameters (different sample sizes and either Type 1 or Type 2 simulations),
+analyzes the data sets and stores the result. This function will run until
+a pre-specified aim of *converged* models. (Note that models may not always 
+converge, which is specially frequent when sample sizes are small).
+
+
+```{r}
+# First a function that computes how many simulations we still need to run.
+# It outputs FALSE if it can't find a file with simulations. This function is
+# called from the run_till_aim() function which actually runs the simulations.
+sim_till_aim <- function(
+  aim,
+  filter_out_nsubj = 0,  # by default this will consider all sample sizes
+  filter_out_type = ""   # by default it will consider type1 and type2
+  ) {
+  neg2zero <- function(x) ifelse(x < 0, 0, x)  # little trick needed below
+  # retrieve simulations and check which ones converged (both null and full)
+  if (file.exists("power_simulation_results_append.csv")) {
+    sims <- read_csv("power_simulation_results_append.csv")
+  } else {
+    return (FALSE)
+  }
+  # If there are simulations, get the right info about convergence etc
+  sims <- sims %>%
+    select(rseed, Nsubj, sim_type, conv_full, conv_null) %>% unique() %>%
+    mutate(
+      converged = ( is.na(conv_full) & is.na(conv_null) ),
+      Nsubj = as.numeric(Nsubj)
+      ) %>%
+    group_by(Nsubj, sim_type) %>%
+    summarise(sims_run = n(), converged = sum(converged)) %>%
+    mutate(
+      aim = aim,
+      needed_neg = aim - converged,
+      needed = neg2zero(needed_neg)) %>%
+    # Estimated convergence rate at different sample sizes
+    left_join(tibble(
+      Nsubj =     c(15,   60,   96,   102,  108),
+      conv_rate = c(0.13, 0.40, 0.55, 0.56, 0.59))
+      ) %>%
+    mutate(nsims = round(needed / conv_rate)) %>%
+    filter(
+      (! Nsubj %in% filter_out_nsubj),
+      (sim_type != filter_out_type)
+      )
+  sims
+}
+```
+
+```{r}
+# Function checks how many converged simulations there are and runs new
+# ones until aim is reached. Note the function is parallelized to run faster.
+run_till_aim <- function(
+  aim,  # the number of converged models we want for each sample size (type1/2)
+  sample_sizes = c(15, 60, 108),
+  nb_cores = parallel::detectCores(),  # Number of cores used in parallelization
+  ...
+  ) {
+  tictoc::tic()  # start counter
+  sims <- sim_till_aim(aim, ...)  # nb of simulations left
+
+  # 1st case: no simulations have been run, in which case sims is FALSE
+  if (is.logical(sims)) {
+    # so then run we'll run one of each sample size to get started
+    print("Create file and run one type1 and type2 sim for each sample size")
+    params <- tibble(
+      Nsubj = rep(sample_sizes, each = 2),
+      sim_type = rep(c("type2", "type1"), length.out = 2 * length(sample_sizes))
+      )
+    # include col names 1st time
+    params$incl_col_names <- c(TRUE, rep(FALSE, nrow(params) - 1))
+    params$rseed <- sample.int(10 ^ 9, size = nrow(params))  # random seeds
+    params$sim_id <- seq_len(nrow(params))
+    print("We'll now run:")
+    print(params)
+    # We can't parellize it yet, bc we want column names to be in row 1:
+    pmap(
+      .l = params,
+      .f = sim_many,
+      # fixed simulation parameters (for clarity, comment out the ones passed through params)
+      # Nsubj =,
+      Nitem = 104,
+      fixef_means = fixef_means,
+      fixef_sigma = fixef_sigma,
+      ranef_sigma_subj = ranef_sigma_subj,
+      ranef_sigma_item = ranef_sigma_item
+    )
+
+    } else {  # So there is already a file...
+      # Check if we have attained the aim
+      if (sum(sims$nsims) == 0) {
+        return("Done, my friend!!!")
+      }
+      # There are simulations but we haven't reached the aim.
+      # Print how many simulations will be run:
+      print("We'll now run:")
+      print(sims)
+      # set up parameters
+      params <- tibble(
+        rseed = sample.int(10 ^ 9, size = sum(sims$nsims)),
+        Nsubj = rep(sims$Nsubj, sims$nsims),
+        sim_type = rep(sims$sim_type, sims$nsims),
+        incl_col_names = FALSE
+      )
+      params$sim_id <- seq_len(nrow(params))
+
+      # Now we can parallelize!
+      registerDoParallel(nb_cores)  # use multicore, by default uses all available
+      foreach (
+        i = 1:nrow(params),
+        .packages = c("tidyverse", "broom", "lme4", "mvtnorm", "boot", "tictoc"),
+        .export = c(
+          "sim_many", "simulate_binom", "analyze_simulation", "fixef_means",
+          "fixef_sigma", "ranef_sigma_subj", "ranef_sigma_item"
+          )
+        ) %dopar% {
+          pmap(
+            .l = params[i,],
+            .f = sim_many,
+            # fixed simulation parameters (for clarity, comment out the ones passed through params)
+            # Nsubj =,
+            Nitem = 104,
+            fixef_means = fixef_means,
+            fixef_sigma = fixef_sigma,
+            ranef_sigma_subj = ranef_sigma_subj,
+            ranef_sigma_item = ranef_sigma_item
+          )
+        }
+      }
+  tictoc::toc()  # stop counter
+  # recursively runs itself until aim is reached
+  run_till_aim(aim, ...)
+}
+```
 
 
 ### Run the simulations (generate and analyze data sets)
@@ -484,8 +594,7 @@ Load results from disk if already run and show output of simulations:
 
 ```{r}
 # This version of the file keeps stacking the result of simulations:
-# mysims <- read_csv("sims_etc/power_simulation_results_append.csv")
-mysims <- read_csv("sims_etc/power_simulation_results_append_w108_200205.csv") %>%
+mysims <- read_csv("sims_etc/power_simulation_results_append.csv") %>%
   filter(Nsubj %in% c(15, 60, 108))
 # Rearrange columns
 mysims <- mysims %>%
@@ -636,10 +745,10 @@ plot_sims <- function(type, df = sims_BIC) {
   mycolours <- c("#00AFBB", "#E7B800", "#FC4E07")
 
   if (type == "type2") {
-    mytitle <- "Type 2 simulations\n(effect is present)"
+    mytitle <- "Type 2 simulations: H1 is true\n(effect is present)"
     yinterc <- 0.9
     } else if (type == "type1") {
-      mytitle <- "Type 1 simulations\n(effect is absent)"
+      mytitle <- "Type 1 simulations: H0 is true\n(effect is absent)"
       yinterc <- 0.05
       } else {
         stop("Invalid argument for type!")
