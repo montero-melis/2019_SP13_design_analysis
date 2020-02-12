@@ -3,7 +3,7 @@
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 
 # Load the file with simulations to remove duplicates from
-sims <- read_csv("sims_etc/power_simulation_results_append_all-relevant_200205.csv")
+sims <- read_csv("sims_etc/power_simulation_results_append.csv")
 head(sims)
 
 # We consider duplicates if same rseed, Nsubj and sim_type appears more than 14 times
@@ -45,4 +45,4 @@ sims_unique %>% group_by(rseed, Nsubj, sim_type) %>%
   summarise(count = n())
 
 # Save the data frame without duplicates
-write_csv(sims_unique, "sims_etc/power_simulation_results_append_all-relevant_200205_noduplic.csv")
+# write_csv(sims_unique, "sims_etc/power_simulation_results_append_all-relevant_200205_noduplic.csv")

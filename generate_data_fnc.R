@@ -15,19 +15,7 @@ library("boot")  # for inv.logit()
 
 # For power analyses:
 # The function can also be used for simulation-based power analyses. Step 3b
-# is important in that regard. Here is what it does by default:
-# Rather than sampling *all* fixed effects coefficients from the covariance
-# matrix, step 3b keeps the effect of the critical interaction constant
-# by plugging the intended interaction effect back in (see step 3b). This makes
-# sense since we are evaluating the power conditioned on a specific effect
-# size, so we don't want it to vary randomly in each simuation. In fact, for
-# the Type I error analysis (false positive rate), this step is *required*.
-# (The relevant discussion is found in email correspondence with Florian
-# (see e-mail sent by Jaeger, Florian <fjaeger@UR.Rochester.edu>; Subj: "Re:
-# Pragmatic advice on power analysis to determine sample size for conceptual
-# replication", sent on Sat 2018-10-13 04:46).
-# To sample the critical effect from the estimated distribution, set the
-# parameter 'keep_critical_effect_constant' to FALSE
+# allows us to run Type 1 analysis by making the critical coefficient 0.
 
 simulate_binom <- function (
   Nsubj  = 2,  # Number of participants
@@ -36,7 +24,7 @@ simulate_binom <- function (
   fixef_sigma,        # covariance matrix for fixed effects (diagonals contain SE^2)
   ranef_sigma_subj,   # covariance matrix for random effects by subject
   ranef_sigma_item,   # covariance matrix for random effects by item
-  keep_critical_effect_constant = FALSE,  # see comment in paragraph above
+  type1 = FALSE,  # see comment in paragraph above
   full_output = FALSE,      # Output list with fixef/ranef dfs in addition to data?
   print_each_step = FALSE  # print output at each step to unveil inner workings
   ) {
@@ -115,8 +103,8 @@ simulate_binom <- function (
     sigma = fixef_sigma  # covariance of fixed effects
     )
   myprint(fixef)
-  # 3b) Plug the intended coefficient for the interaction back in (by default).
-  if (keep_critical_effect_constant) { fixef[4] <- fixef_means[4] }
+  # 3b) For Type1 error simulations, the critical effect is zero.
+  if (type1)  fixef[4] <- 0
   myprint(fixef)
   # 3c) Save fixed effects as df for output
   fixef_df <- tibble(coef = colnames(fixef), betas = fixef[1, ])

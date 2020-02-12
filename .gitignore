@@ -21,6 +21,7 @@ scripts_cluster/power_simulation_results_append*
 
 # other
 for-phillip.*
+scripts_cluster/run_*
 
 
 ## DEFAULT
