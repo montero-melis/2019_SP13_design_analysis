@@ -1,7 +1,7 @@
 ---
-title: "Appendix C: Power analysis for SP13 replication"
+title: 'Appendix C: Power analysis for SP13 replication'
 author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
-date: '`r as.character(format(Sys.Date(), format="%d/%m/%Y"))`'
+date: "`r as.character(Sys.Date())`"
 output:
   html_document:
     depth: 2
@@ -106,6 +106,8 @@ library("lme4")
 library("brms")
 library("tictoc")
 library("ggpubr")
+library("foreach")     # to parallelize simulations
+library("doParallel")  # to parallelize simulations
 ```
 
 ```{r}
@@ -263,7 +265,8 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
     list(full, null)
   }
   
-  # Fit models without RE correlations using double-bar syntax:
+  # Fit models without RE correlations using double-bar syntax
+  # (see Reinhold Kliegl's post: https://rpubs.com/Reinhold/391071)
   myf <- "Error ~ mv + wt + mv_wt + (1 + mv + wt + mv_wt || subject) + (1 + mv || item)"
   models <- fit_formula(myf)
 
@@ -294,10 +297,9 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
 
 
 Let's illustrate with an example.
-The output is a data frame with information about the analysis of the simulated
-data set:
 
 ```{r, message=FALSE, warning=FALSE}
+set.seed(753)
 sim_ex <-  simulate_binom(
   Nsubj = 20,
   Nitem = 10,
@@ -307,14 +309,37 @@ sim_ex <-  simulate_binom(
   ranef_sigma_item = ranef_sigma_item,
   )
 tictoc::tic()
-an_ex <- analyze_simulation(sim_ex, print_model_summaries = TRUE)
+# print_model_summaries=TRUE would print the actual model summaries to screen
+an_ex <- analyze_simulation(sim_ex, print_model_summaries = FALSE)
 tictoc::toc()
-an_ex
+```
+
+The output is a data frame with information about the analysis of the simulated
+data set. Note that the first columns are unique (they are about parameter
+estimates in the model), but starting from the convergence column the info is
+repeated across rows. We will mostly use results from the BIC of every model
+but all the other output is good to keep to better understand what is going on
+and what the actual parameter estimates are for the different models:
+
+```{r}
+kable(head(an_ex, 3))
 ```
 
 
 
+
 ### Function to analyze many data sets
+
+This function does the basic work: It is designed to be applied with
+`purrr::pmap` together with a data frame where each row passes the relevant
+parameters that vary across simulations (Nsubj and sim_type) and some other
+more detailed stuff (e.g., rseed, incl_col_names, ...).
+
+Note that it is designed to directly write simulation results to a file on disk,
+appending to whatever already is on the file. This is because the simulations
+can take days or weeks and this makes it possible to break the process at some
+point and resume later.
+
 
 ```{r}
 sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
@@ -342,19 +367,14 @@ sim_many <- function(rseed, sim_id, Nsubj, sim_type, incl_col_names, ...) {
 ```
 
 
-### Wrapper function
+### Function to tally the simulations left to run
 
-We need a wrapper function that generates data sets with different simulation
-parameters (different sample sizes and either Type 1 or Type 2 simulations),
-analyzes the data sets and stores the result. This function will run until
-a pre-specified aim of *converged* models. (Note that models may not always 
-converge, which is specially frequent when sample sizes are small).
-
+A function that computes how many simulations we still need to run, based on
+the file on disk that stores simulation results. It outputs FALSE if it doesn't
+find the file. This function is called from the `run_till_aim()` function (below)
+which actually runs the simulations.
 
 ```{r}
-# First a function that computes how many simulations we still need to run.
-# It outputs FALSE if it can't find a file with simulations. This function is
-# called from the run_till_aim() function which actually runs the simulations.
 sim_till_aim <- function(
   aim,
   filter_out_nsubj = 0,  # by default this will consider all sample sizes
@@ -394,6 +414,20 @@ sim_till_aim <- function(
 }
 ```
 
+
+
+### Wrapper function
+
+We need a wrapper function that generates data sets with different simulation
+parameters (different sample sizes and either Type 1 or Type 2 simulations),
+analyzes the data sets and stores the result. This function will run until
+a pre-specified aim of *converged* models. (Note that models may not always 
+converge, which is especially frequent when sample sizes are small).
+
+Note that it doesn't generate output to the console. Instead it writes the 
+results to file (because it calls `sim_many()` and that is what `sim_many()`
+does).
+
 ```{r}
 # Function checks how many converged simulations there are and runs new
 # ones until aim is reached. Note the function is parallelized to run faster.
@@ -421,10 +455,10 @@ run_till_aim <- function(
     print("We'll now run:")
     print(params)
     # We can't parellize it yet, bc we want column names to be in row 1:
-    pmap(
+    purrr::pmap(
       .l = params,
       .f = sim_many,
-      # fixed simulation parameters (for clarity, comment out the ones passed through params)
+      # fixed simulation parameters (for clarity, comment out those passed in params)
       # Nsubj =,
       Nitem = 104,
       fixef_means = fixef_means,
@@ -461,10 +495,10 @@ run_till_aim <- function(
           "fixef_sigma", "ranef_sigma_subj", "ranef_sigma_item"
           )
         ) %dopar% {
-          pmap(
+          purrr::pmap(
             .l = params[i,],
             .f = sim_many,
-            # fixed simulation parameters (for clarity, comment out the ones passed through params)
+            # fixed simulation parameters (for clarity, comment out those passed in params)
             # Nsubj =,
             Nitem = 104,
             fixef_means = fixef_means,
@@ -481,126 +515,35 @@ run_till_aim <- function(
 ```
 
 
-### Run the simulations (generate and analyze data sets)
+Run the simulations (generate and analyze data sets)
+-----------------------------------------------
 
-Create a data frame of simulation parameters later called with `purrr::pmap`:
-
-```{r}
-# Number of simulations per N:
-nb_sims <- 5
-# How many different Ns?
-params <- tibble(Nsubj = c(15, 60, 96))
-params <- params[rep(1 : nrow(params), each = nb_sims), ]
-params$rseed <- sample.int(10 ^ 9, size = nrow(params))
-params$sim_id <- seq_len(nrow(params))
-head(params, 4)
-tail(params, 4)
-```
-
-Run the simulations:
-
-```{r, message=FALSE, warning=FALSE}
-# tictoc::tic()
-# mysims <- pmap(
-#   .l = params,
-#   .f = sim_many,
-#   # fixed simulation parameters (for clarity, comment out the ones passed through params)
-#   # Nsubj =,
-#   Nitem = 104,
-#   fixef_means = fixef_means,
-#   fixef_sigma = fixef_sigma,
-#   ranef_sigma_subj = ranef_sigma_subj,
-#   ranef_sigma_item = ranef_sigma_item
-#   ) %>%
-#   bind_rows()
-# tictoc::toc()
-```
-
-Keep running until there are enough converged models:
-
-```{r}
-sim_till_aim <- function(aim, filter_out = 0) {
-  neg2zero <- function(x) ifelse(x < 0, 0, x)
-  # retrieve simulations and check which ones converged (both null and full)
-  sims <- read_csv("sims_etc/power_simulation_results_append.csv") %>%
-    select(rseed, Nsubj, conv_full, conv_null) %>% unique() %>%
-    mutate(converged = ( is.na(conv_full) & is.na(conv_null) )) %>%
-    group_by(Nsubj) %>%
-    summarise(sims_run = n(), converged = sum(converged)) %>%
-    mutate(
-      Nsubj = as.numeric(Nsubj),
-      aim = aim,
-      needed_neg = aim - converged,
-      needed = neg2zero(needed_neg)) %>%
-    # Estimated convergence rate at different sample sizes
-    left_join(tibble(Nsubj = c(15, 60, 96), conv_rate = c(0.11, 0.36, 0.51))) %>%
-    mutate(nsims = round(needed / conv_rate)) %>%
-    filter( (! Nsubj %in% filter_out))
-  sims
-}
-```
-
-Example:
+The following code will run the simulations until there are as many converged
+simulations of each type as specified in the `aim` argument.
+Note that running 1000 simulations could take several days on a normal computer.
+Running 10 000 as we did is only recommended on a computer cluster.
 
 ```{r, message=FALSE}
-# Estimated nnumber of simulations needed to get to an aim
-# sim_till_aim(1000)
-# Filter out simulations with sample size 15 and 60
-# sim_till_aim(1000, c(15, 60))
-```
-
-
-```{r}
-# Function that checks how many converged simulations there are and runs new
-# ones to reach the aim:
-run_till_aim <- function(aim, ...) {
-  tictoc::tic()
-  sims <- sim_till_aim(aim, ...)
-  params <- tibble(
-    rseed = sample.int(10 ^ 9, size = sum(sims$nsims)),
-    Nsubj = rep(sims$Nsubj, sims$nsims)
-  )
-  params$sim_id <- seq_len(nrow(params))
-  params
-  pmap(
-    .l = params,
-    .f = sim_many,
-    # fixed simulation parameters (for clarity, comment out the ones passed through params)
-    # Nsubj =,
-    Nitem = 104,
-    fixef_means = fixef_means,
-    fixef_sigma = fixef_sigma,
-    ranef_sigma_subj = ranef_sigma_subj,
-    ranef_sigma_item = ranef_sigma_item
-  )
-  tictoc::toc()
-  }
-```
-
-
-Check and run!
-
-```{r, message=FALSE}
-# sim_till_aim(1000, filter_out = c(15))
-# run_till_aim(1000, filter_out = c(15))
+sim_till_aim(1)  # Outputs FALSE if there isn't any file on disk yet
+# run_till_aim(aim = 1)
 ```
 
 
 
 
-### Load from disk those already run
+Load simulations from disk
+--------------------------
 
-Load results from disk if already run and show output of simulations:
+Once the simulations have run, we load results from disk:
 
-```{r}
+```{r, message = FALSE}
 # This version of the file keeps stacking the result of simulations:
-mysims <- read_csv("sims_etc/power_simulation_results_append.csv") %>%
-  filter(Nsubj %in% c(15, 60, 108))
-# Rearrange columns
+# mysims <- read_csv("sims_etc/power_simulation_results_append.csv")
+mysims <- read_csv("sims_etc/power_simulation_results_append_lite.csv")
+# Rearrange columns for convenience:
 mysims <- mysims %>%
   select(sim_id : Nsubj, t_ellapsed, term : conv_null)
-head(mysims)
-tail(mysims) %>% kable(digits = 2)
+head(mysims, 3) %>% kable(digits = 2)
 ```
 
 
@@ -608,7 +551,8 @@ tail(mysims) %>% kable(digits = 2)
 
 
 Analyze results
----------------
+===============
+
 
 ### Shape of data frame with results
 

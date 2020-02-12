@@ -46,3 +46,21 @@ sims_unique %>% group_by(rseed, Nsubj, sim_type) %>%
 
 # Save the data frame without duplicates
 # write_csv(sims_unique, "sims_etc/power_simulation_results_append_all-relevant_200205_noduplic.csv")
+
+
+# Create lite version -----------------------------------------------------
+
+# The full file is enormous, so create a lite version with just 5% of the simu-
+# lations randomly selected:
+
+# Get the full simulations from the workspace or from disk
+mysims <- read_csv("sims_etc/power_simulation_results_append_final_10k.csv")
+# mysims <- sims_unique
+
+rseeds <- unique(mysims$rseed)
+rseeds_sel <- sample(rseeds, size = round(length(rseeds) / 20))
+
+sims_lite <- mysims %>% filter(rseed %in% rseeds_sel)
+
+# write_csv(sims_lite, "sims_etc/power_simulation_results_append_lite.csv")
+
