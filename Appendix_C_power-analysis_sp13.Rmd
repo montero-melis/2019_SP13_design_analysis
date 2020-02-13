@@ -112,7 +112,7 @@ library("doParallel")  # to parallelize simulations
 
 ```{r}
 # Global plotting parameters
-myalpha <- 0.005
+myalpha <- 0.02
 theme_set(theme_bw())
 ```
 
@@ -550,16 +550,18 @@ head(mysims, 3) %>% kable(digits = 2)
 
 
 
-Analyze results
+Analyze simulation results
 ===============
 
 
-### Shape of data frame with results
+Divide simulation results into two data frames
+------------------------------
 
-The data frame (tibble) contains a lot of information about the model fitting.
+The data frame loaded above contains a lot of information about the model
+fitting (it consists of `r nrow(mysims)` rows).
 Mainly it consists of two sets of output:
 
-1) The BIC of the models and corresponding BF_BIC:
+1) The BIC of the models and the corresponding Bayes factor (BF_BIC):
 
 ```{r}
 sims_BIC <- mysims %>%
@@ -568,7 +570,7 @@ sims_BIC <- mysims %>%
   mutate(
     converged = is.na(conv_full) & is.na(conv_null)
     )
-sims_BIC %>% tail() %>% kable(digits = 2)
+sims_BIC %>% head(3) %>% kable(digits = 2)
 ```
 
 2) The fixed effect coefficient estimates of each model (in long format):
@@ -578,27 +580,16 @@ sims_coef <- mysims %>%
   select(sim_id : convergence) %>%
   unique() %>%
   mutate(converged = is.na(convergence) | convergence == "")
-sims_coef %>% head() %>% kable(digits = 2)
+sims_coef %>% head(3) %>% kable(digits = 2)
 ```
 
 
-### Basics
+Number of simulations and convergence failures
+---------------------
 
-Any repeated random seeds?
-
-```{r}
-nrow(sims_BIC) - length(unique(sims_BIC$rseed))
-```
-
-
-Number of simulations:
-
-```{r}
-with(sims_BIC, addmargins(table(Nsubj, converged, sim_type)))
-```
-
-
-Percentage where both full and null model converged:
+Many models failed to converge, especially those with sample sizes of 15.
+We are only interested in simulations in which both full and null model converged.
+What's the percentage of convergence failures?
 
 ```{r}
 sims_BIC %>%
@@ -608,66 +599,45 @@ sims_BIC %>%
   kable(digits = 2)
 ```
 
-By sample size only
+Keep converged models only
+--------------------------
+
+We keep only the models that converged. In an appendix below we show that this
+choice makes our estimates more *conservative*.
 
 ```{r}
-sims_BIC %>%
-  group_by(Nsubj) %>%
-  summarise(run = n(), converged = sum(converged)) %>%
-  mutate(prop_converged = converged / run) %>%
-  kable(digits = 2)
+sims_BIC_all <- sims_BIC
+sims_BIC     <- sims_BIC %>% filter(converged == TRUE)
+sims_coef_all <- sims_coef
+sims_coef     <- sims_coef %>% filter(converged == TRUE)
 ```
 
 
+Bayes factors
+-------------
 
-### BF_BIC
+### Actual BFs
 
-Summary of results
-
-```{r}
-by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, sim_type, converged)), summary)
-```
-
-Power:
+Visual summary of results (BFs on log10 scale):
 
 ```{r}
-sims_BIC %>%
-  mutate(BF6 = BF_BIC >= 6) %>%
-  group_by(Nsubj, converged, sim_type) %>%
-  summarise(power = mean(BF6)) %>%
-  ggplot(aes(x = converged, y = power)) +
-  geom_bar(stat = "identity") +
-  facet_grid(sim_type ~ Nsubj) +
-  geom_hline(yintercept = .9)
-```
-
-
-```{r}
-sims_BIC %>%
-  mutate(BF6 = BF_BIC >= 6) %>%
-  group_by(converged, sim_type, Nsubj) %>%
-  summarise(power_percent = 100 * mean(BF6)) %>%
-  kable(digits = 1)
-```
-
-
-```{r}
-ggplot(sims_BIC, aes(x = converged, y = log10(BF_BIC))) + 
+ggplot(sims_BIC, aes(x = factor(Nsubj), y = log10(BF_BIC))) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(sim_type ~ Nsubj) +
-  geom_hline(yintercept = log10(6), linetype = "dashed") +
-  xlab("Both models converged")
+  facet_grid(. ~ sim_type) +
+  geom_hline(yintercept = log10(6), linetype = "dashed", colour = "red") +
+  geom_hline(yintercept = log10(1/6), linetype = "dashed", colour = "blue") +
+  xlab("Sample size (number of participants)")
 ```
+
+Numerical summary
 
 ```{r}
-ggplot(sims_BIC %>% filter(converged == TRUE), aes(x = log10(BF_BIC))) + 
-  geom_density() +
-  facet_grid(sim_type ~ Nsubj)
+by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, sim_type)), summary)
 ```
 
 
-### Plot for paper
+### Design analysis: How often will we reach the right decision?
 
 ```{r}
 plot_sims <- function(type, df = sims_BIC) {
@@ -738,39 +708,41 @@ sims_BIC %>%
 
 
 
-### Significance of critical coefficients
+Significance of critical coefficients
+-------------------------------------
 
-Summary of z-values for critical interaction (in full models):
+Summary of z-values for critical interaction (in full models).
+The dashed line marks the conventional threshold for significance in frequentist
+analysis (alpha = .05).
 
 ```{r}
 sims_coef %>%
   filter(term == "mv_wt") %>%
-  select(statistic) %>%
-  pull %>%
-  summary
+  ggplot(aes(x = factor(Nsubj), y = statistic)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(. ~ sim_type) +
+  geom_hline(yintercept = 2, linetype = "dashed") +
+  xlab("Sample size (number of participants)")
 ```
 
 
-```{r}
-sims_coef %>%
-  filter(term == "mv_wt") %>%
-  ggplot(aes(x = sim_type, y = statistic)) + 
-  geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(converged ~ Nsubj) +
-  geom_hline(yintercept = 2, linetype = "dashed")
-```
+Sanity check: Are we retrieving the correct estimates?
+-----------------------------------------------------
 
+Since we are simulating the data sets, we *know* what the population-level
+effects are, both for fixed and random effects. Are our models correctly
+retrieving them?
 
-Estimates of the critical interaction:
+First, estimates of the population-level effect for the critical interaction:
 
 ```{r}
 sims_coef %>%
   filter(term == "mv_wt") %>%
-  ggplot(aes(x = sim_type, y = estimate)) + 
+  ggplot(aes(x = factor(Nsubj), y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(converged ~ Nsubj) +
+  facet_grid(. ~ sim_type) +
   geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "blue") +
   ylab("Estimate")
@@ -782,23 +754,23 @@ Estimates of the random by-subject variation for critical effect:
 ```{r}
 sims_coef %>%
   filter(grepl("sd_mv_wt\\.subject", term)) %>%
-  ggplot(aes(x = sim_type, y = estimate)) + 
+  ggplot(aes(x = factor(Nsubj), y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(converged ~ Nsubj) +
-  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed") +
-  ylab("Estimate")
+  facet_grid(. ~ sim_type) +
+  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed")
 ```
+
+Estimates of the random by-subject variation for the intercept:
 
 ```{r}
 sims_coef %>%
   filter(grepl("sd_\\(Intercept\\).subject", term)) %>%
-  ggplot(aes(x = sim_type, y = estimate)) + 
+  ggplot(aes(x = factor(Nsubj), y = estimate)) + 
   geom_boxplot() +
   geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(converged ~ Nsubj) +
-  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed") +
-  ylab("Estimate")
+  facet_grid(. ~ sim_type) +
+  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed")
 ```
 
 
@@ -1060,6 +1032,81 @@ that the effect size might have been severely over-estimated, and b) the
 original ANOVA-based analysis seem inappropriate for the data at hand, we have
 chosen a design that will also guarantee  a high probability of compelling
 evidence using an improved analysis method and with a small-to-medium effect size.
+
+
+
+Appendix: Converged vs non-converged models
+==========================================
+
+We discarded all models that failed to converge or resulted in other model
+fitting problems. Here we show that these models were *more liberal* in accepting
+the H1. In other words, our choice of excluding them makes our results more
+conservative:
+
+
+
+```{r}
+ggplot(sims_BIC_all, aes(x = converged, y = log10(BF_BIC))) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(sim_type ~ Nsubj) +
+  geom_hline(yintercept = log10(6), linetype = "dashed", colour = "red") +
+  geom_hline(yintercept = log10(1/6), linetype = "dashed", colour = "blue") +
+  xlab("Sample size (number of participants)")
+```
+
+
+
+```{r}
+sims_coef_all %>%
+  filter(term == "mv_wt") %>%
+  ggplot(aes(x = converged, y = statistic)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(sim_type ~ Nsubj) +
+  geom_hline(yintercept = 2, linetype = "dashed")
+```
+
+
+```{r}
+sims_coef_all %>%
+  filter(term == "mv_wt") %>%
+  ggplot(aes(x = converged, y = estimate)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(sim_type ~ Nsubj) +
+  geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "blue") +
+  ylab("Estimate")
+```
+
+
+Estimates of the random by-subject variation for critical effect:
+
+```{r}
+sims_coef_all %>%
+  filter(grepl("sd_mv_wt\\.subject", term)) %>%
+  ggplot(aes(x = sim_type, y = estimate)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(converged ~ Nsubj) +
+  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed") +
+  ylab("Estimate")
+```
+
+```{r}
+sims_coef_all %>%
+  filter(grepl("sd_\\(Intercept\\).subject", term)) %>%
+  ggplot(aes(x = converged, y = estimate)) + 
+  geom_boxplot() +
+  geom_jitter(height = 0, alpha = myalpha) +
+  facet_grid(sim_type ~ Nsubj) +
+  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed") +
+  ylab("Estimate")
+```
+
+
+
 
 
 Session info
