@@ -1,5 +1,5 @@
 ---
-title: 'Appendix C: Power analysis for SP13 replication'
+title: 'Appendix C: Bayes factor design analysis for SP13 replication'
 author: '[Guillermo Montero-Melis](https://www.mpi.nl/people/montero-melis-guillermo)'
 date: "`r as.character(Sys.Date())`"
 output:
@@ -14,8 +14,8 @@ output:
 Introduction
 ============
 
-This knitr script executes and reports a power analysis for our replication of
-Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
+This knitr script executes and reports a Bayes factor design analysis for our
+replication of Shebani and Pulvermüller (2013, *Cortex*), henceforth SP13.
 
 This document complements our manuscript submitted as a Registered Report to
 *Cortex*. See end of document for session info, including package versions, etc.
@@ -28,32 +28,34 @@ General approach
 We adopt the following approach for our Bayes factor design analysis (see
 Schönbrodt and Wagenmakers, 2017, *Psychon Bull Rev*):
 
-1. Simulate random data from the statistical model fitted to the original data
-and other parameters estimated from pilot data.
+1. Simulate data sets with parameters obtained from the analysis of the
+original data and other parameters estimated from pilot data.
 2. Fit two logisic mixed models to each data set using `lme4`, one that includes
-the interaction of interest and another that does not.
-3. Compute a Bayes factor for the two models based on the Bayesian information
-   criterion (BIC) (see [this link](https://rpubs.com/lindeloev/bayes_factors) 
-   for the exact approach).
+the critical interaction effect as a population-level (fixed) effect and another
+that does not.
+3. Compute a Bayes factor for the alternative hypothesis (H1: there is an effect)
+vs the null hypothesis (H0: there is no effect) using the Bayesian information
+criterion (BIC) of each of the models (see 
+[this link](https://rpubs.com/lindeloev/bayes_factors) for the exact approach).
 4. Repeat steps 1-3 a large number of times for different sample sizes and for
 a scenario in which the critical effect is zero (Type 1 simulations) and a 
 scenario where the critical effect exists (Type 2 simulations).
 
 
-About the parameters of our statistical model to generate the data
+About the parameters of our statistical generative model
 ----------------------------------------
 
 Data simulations are based on our re-analysis of the original data as shared by
 SP13. Since that data set did not consist of trial-level observations, we do not
-have a way to estimate item variability from it.
+have a way to estimate item-level variability from it.
 We therefore use our own pilot data to estimate item-level variability (details
 below).
-All in all, we assume a generative model for the simulations that mimicks
+We assume a generative model for the simulations that mimicks
 our own experimental setup. Each participant generates data for the four
-experimental cells defined by our design:
+experimental cells defined by our 2x2 design with the following factors:
 
 - Word type: arm words vs leg words
-- Inferference type: arm vs foot paradiddle
+- Interference Movement: arm vs foot movement
 
 There are 104 items (52 arm and 52 leg words) in our study, so we simulate
 208 observations per participant.
@@ -67,7 +69,7 @@ and items (for intercepts and slopes for Interference Movement). The simulations
 cross the following factors:
 
 1) Participant sample size: N=15, 60, 108; that is, the original sample size, 
-Nmin, and Nmax, respectively.
+$N_{min}$, and $N_{max}$, respectively.
 2) Simulation type: Type 1 (critical population-level effect set to zero), type 2
 (critical population-level effect sampled from the model of the original data).
 
@@ -81,13 +83,14 @@ approach we will use for our main analysis:
 It takes roughly 2 hours to run each analysis of a simulated data set using
 `brms` and bridge sampling (as implemented in our analysis pipeline, see
 [Appendix_E_analysis_pipeline](https://github.com/montero-melis/2019_SP13-replication_reg-report/blob/master/Appendix_E_analysis_pipeline.html)).
-If we used this approach to simulate 10000 data sets for three different Ns, 
+If we used this approach to simulate 10,000 data sets for three different Ns, 
 and the two simulation types, it would take approximately 
 $10000 \times 3 \times 2 = 60000$ hours,
 or almost *seven years* to run the simulations.
 Our approach is a compromise that allows for a good enough estimation of Bayes
 factors taking into account the specifics of our design as opposed to 
 off-the-shelve R packages like `BFDA` (Schönbrodt & Stefan, 2018).
+The simulations still took several days to run on a computer cluster.
 
 
 Setup workspace
@@ -97,7 +100,7 @@ Setup workspace
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, message=FALSE}
+```{r, message=FALSE, waning=FALSE}
 library("knitr")
 library("tidyverse")  # ggplot2, dplyr, readr, purrr, etc
 library("broom")
@@ -112,7 +115,8 @@ library("doParallel")  # to parallelize simulations
 
 ```{r}
 # Global plotting parameters
-myalpha <- 0.02
+myalpha <- 0.05
+jitter_colour <- "dodgerblue3"
 theme_set(theme_bw())
 ```
 
@@ -144,13 +148,6 @@ summary(bfm_full)
 ```
 
 
-Bayes Factor for H1 vs H0:
-
-```{r}
-bfm_max[[3]]
-```
-
-
 
 
 Power simulations
@@ -161,7 +158,7 @@ Prepare data generating process
 
 ### Load function
 
-Load the **function** that generates binomial data for our design.
+Load the function that generates binomial data for our design.
 
 ```{r}
 source("generate_data_fnc.R")
@@ -170,39 +167,42 @@ source("generate_data_fnc.R")
 
 ### Set up simulation parameters
 
-The output from the model fit to the original data serves as input to the function.
-We need to put them into the right format:
+We take our simulation parameters from the statistical model fit to the original
+data. Next we put these parameters into the right format for our 
+`simulate_binom()` function:
 
 ```{r}
-# The info we need is in the summary of fixed effects of the model:
+# Fixed (i.e., population-level) effects:
 fixef(bfm_full)
 
-# Vector of coefficient means
+# Vector of coefficient means for fixed effects
 fixef_means <- fixef(bfm_full)[, 1]
 fixef_means
 
-# Covariance matrix (Sigma); we need to square the SEs to convert them to Variances
+# SEMs for fixed effects. These we take from the covariance matrix (Sigma) of
+# the model. Note we need to square the SEMs to convert them to variances, which
+# is what our simulate_binom() function expects (rather than SD).
 fixef_sigma <- diag(fixef(bfm_full)[, 2] ^ 2)  # we assume uncorrelated diagonal matrix
 fixef_sigma
 
-# Random effects for the model:
+# By-subject random effects for the model:
 VarCorr(bfm_full)$subject$sd
-# Specifically we extract by-subject random SDs from this matrix (they are stored
-# as a "stddev" attribute of the matrix) and square them to obtain variances:
+# Extract by-subject random SDs and square them to obtain variances:
 ranef_sigma_subj <- diag(VarCorr(bfm_full)$subject$sd[, 1]) ^ 2
 ranef_sigma_subj
 ```
 
-An estimate for random effects by item we take from our pilot data (see
+The original data consists of aggregated by-subject data, not trial-level data.
+To obtain estimates for item-level variability we use our own pilot data (see
 [here](https://github.com/montero-melis/2018_replication_sheb-pulv2013/blob/master/1806_pilot_analysis/item-variance_estimates.R)).
 
 
 ```{r}
 # The random by-item intercept is SD=0.65. However, we don't have estimates for
 # by-item random slope for movement because we only ran the control condition in
-# the pilot. We will assume that random slope to be the same as the by-subject
-# random variability for the critical interaction, which is likely to be an
-# overestimate but then it will only make our power estimates more conservative:
+# the pilot. We will assume the SD for this random slope to be the same as the
+# by-subject SD for the slope of the critical interaction, which is likely to be
+# an overestimate. If so, it will only make our power estimates more conservative:
 ranef_sigma_item <- diag(c(0.65, 0.06)) ^ 2  # square to obtain variances
 ranef_sigma_item
 ```
@@ -213,9 +213,10 @@ ranef_sigma_item
 We can now call the `simulate_binom` function to generate data:
 
 ```{r, message = FALSE}
+set.seed(753)
 sim_ex <- simulate_binom(
   Nsubj = 10,
-  Nitem = 20,
+  Nitem = 24,
   fixef_means = fixef_means,
   fixef_sigma = fixef_sigma,
   ranef_sigma_subj = ranef_sigma_subj,
@@ -296,18 +297,10 @@ analyze_simulation <- function(df, print_model_summaries = FALSE) {
 ```
 
 
-Let's illustrate with an example.
+Let's illustrate with an example (using the data set simulated above).
 
 ```{r, message=FALSE, warning=FALSE}
 set.seed(753)
-sim_ex <-  simulate_binom(
-  Nsubj = 20,
-  Nitem = 10,
-  fixef_means = fixef_means,
-  fixef_sigma = fixef_sigma,
-  ranef_sigma_subj = ranef_sigma_subj,
-  ranef_sigma_item = ranef_sigma_item,
-  )
 tictoc::tic()
 # print_model_summaries=TRUE would print the actual model summaries to screen
 an_ex <- analyze_simulation(sim_ex, print_model_summaries = FALSE)
@@ -330,15 +323,18 @@ kable(head(an_ex, 3))
 
 ### Function to analyze many data sets
 
-This function does the basic work: It is designed to be applied with
+The following function does the basic work: It is designed to be applied with
 `purrr::pmap` together with a data frame where each row passes the relevant
-parameters that vary across simulations (Nsubj and sim_type) and some other
-more detailed stuff (e.g., rseed, incl_col_names, ...).
+parameters that vary across simulations (`Nsubj` and `sim_type`), alon with
+the random seed (`rseed`) to make the simulations reproducible, and yet some
+other information (like `incl_col_names`) which are needed for the functions to
+combine together in the intended way.
 
-Note that it is designed to directly write simulation results to a file on disk,
-appending to whatever already is on the file. This is because the simulations
-can take days or weeks and this makes it possible to break the process at some
-point and resume later.
+Note that this function directly writes simulation results to a file on disk,
+appending new simulation results to whatever already is on the file. This is
+better than generating an R object in the current session: since the simulations
+can take days or weeks, writing to disk makes it possible to break the process
+at any point and resume the simulations later.
 
 
 ```{r}
@@ -424,9 +420,9 @@ analyzes the data sets and stores the result. This function will run until
 a pre-specified aim of *converged* models. (Note that models may not always 
 converge, which is especially frequent when sample sizes are small).
 
-Note that it doesn't generate output to the console. Instead it writes the 
+Note again that it doesn't generate output to the console. Instead it writes the 
 results to file (because it calls `sim_many()` and that is what `sim_many()`
-does).
+does, see above).
 
 ```{r}
 # Function checks how many converged simulations there are and runs new
@@ -524,19 +520,15 @@ Note that running 1000 simulations could take several days on a normal computer.
 Running 10 000 as we did is only recommended on a computer cluster.
 
 ```{r, message=FALSE}
-sim_till_aim(1)  # Outputs FALSE if there isn't any file on disk yet
-# run_till_aim(aim = 1)
+# sim_till_aim(aim = 100)  # Outputs FALSE if there isn't any file on disk yet
+# run_till_aim(aim = 100)
 ```
 
 
+Basic descriptors of simulations and processing
+==========================================
 
-
-
-
-Analyze simulation results
-===============
-
-Load simulations from disk
+Load simulations from disk and split into two data frames
 --------------------------
 
 Once the simulations have run, we load results from disk:
@@ -551,10 +543,6 @@ mysims <- mysims %>%
 head(mysims, 3) %>% kable(digits = 2)
 ```
 
-
-
-Divide simulation results into two data frames
-------------------------------
 
 The data frame loaded above contains a lot of information about the model
 fitting (it consists of `r nrow(mysims)` rows).
@@ -583,7 +571,7 @@ sims_coef %>% head(3) %>% kable(digits = 2)
 ```
 
 
-Number of simulations and convergence failures
+Number of simulations and proportion of converged models
 ---------------------
 
 Many models failed to converge, especially those with sample sizes of 15.
@@ -598,7 +586,8 @@ sims_BIC %>%
   kable(digits = 2)
 ```
 
-Keep converged models only
+
+Discard convergence failures
 --------------------------
 
 We keep only the models that converged. In an appendix below we show that this
@@ -612,31 +601,47 @@ sims_coef     <- sims_coef %>% filter(converged == TRUE)
 ```
 
 
-Bayes factors
+
+Simulation results
+===============
+
+
+Bayes factors: actual values
 -------------
 
-### Actual BFs
-
-Visual summary of results (BFs on log10 scale):
+Visual summary of results (BFs are shown on log10 scale):
 
 ```{r}
 ggplot(sims_BIC, aes(x = factor(Nsubj), y = log10(BF_BIC))) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(. ~ sim_type) +
   geom_hline(yintercept = log10(6), linetype = "dashed", colour = "red") +
   geom_hline(yintercept = log10(1/6), linetype = "dashed", colour = "blue") +
   xlab("Sample size (number of participants)")
 ```
 
-Numerical summary
+In the plot above:
+
+- BFs above the red dashed line ($>6$) lead to accepting the alternative 
+hypothesis (H1);
+- BFs below the blue dashed line ($<\frac{1}{6}$) lead to accepting the null
+hypothesis (H0);
+- BFs between the two lines constitute inconclusive evidence.
+
+
+Below is a numerical summary of the same information:
 
 ```{r}
 by(sims_BIC$BF_BIC, with(sims_BIC, list(Nsubj, sim_type)), summary)
 ```
 
 
-### Design analysis: How often will we reach the right decision?
+Bayes factor design analysis: How often will we reach the right decision?
+------------------------------------------------------
+
+Create a figure that summarizes the design analysis. This is the figure used
+in our report.
 
 ```{r}
 plot_sims <- function(type, df = sims_BIC) {
@@ -652,11 +657,10 @@ plot_sims <- function(type, df = sims_BIC) {
     summarise(count = n()) %>%
     mutate(perc = count / sum(count))
 
-  # Assign a bunch of values depending on whether it's type 1 or 2 simulations
   mylevels <- c("Accept H0", "Inconclusive", "Accept H1")
-  # mycolours <- c("#E69F00", "#999999", "#56B4E9")
   mycolours <- c("#00AFBB", "#E7B800", "#FC4E07")
-
+  
+  # Some values are assigned depending on whether it's type 1 or 2 simulations
   if (type == "type2") {
     mytitle <- "Type 2 simulations: H1 is true\n(effect is present)"
     yinterc <- 0.9
@@ -688,7 +692,7 @@ p2 <- plot_sims("type2")
 ggarrange(p1, p2, ncol=2, nrow=1, common.legend = TRUE, legend="right")
 ```
 
-In table format:
+Same information in table format:
 
 ```{r}
 sims_BIC %>%
@@ -707,55 +711,92 @@ sims_BIC %>%
 
 
 
-Significance of critical coefficients
+Frequentist analysis: Significance of critical coefficients
 -------------------------------------
 
-Summary of z-values for critical interaction (in full models).
+We can also do a power analysis from the frequentist perspective. To this end,
+we look at the *z*-values for the critical interaction (in the full models which
+have the interaction, of course).
+
 The dashed line marks the conventional threshold for significance in frequentist
-analysis (alpha = .05).
+analysis for two-tailed hypotheses (with alpha = .05), namely $z=1.96$.
 
 ```{r}
 sims_coef %>%
   filter(term == "mv_wt") %>%
   ggplot(aes(x = factor(Nsubj), y = statistic)) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(. ~ sim_type) +
-  geom_hline(yintercept = 2, linetype = "dashed") +
+  geom_hline(yintercept = 1.96, linetype = "dashed") +
   xlab("Sample size (number of participants)")
 ```
+
+
+Summary of decisions taken in a table format. In a frequentist framework we
+either reject the null or fail to reject it.
+Type 1 simulations show us the rate of false positives; Type 2 simulations show
+power:
+
+```{r}
+freq_decis <- expand.grid(
+  H0_decision = c("Reject", "Fail to reject"),
+  sim_type = unique(sims_coef$sim_type)
+  ) %>%
+  mutate(
+    decision = c("correct", "incorrect", "incorrect", "correct" ),
+    characterization = c("effect detected", "false negative / type 2 error", 
+                      "false positive / type 1 error", "no effect")
+    )
+sims_coef %>%
+  filter(term == "mv_wt") %>%
+  mutate(H0_decision = ifelse(abs(statistic) > 1.96, "Reject", "Fail to reject")) %>%
+  group_by(sim_type, Nsubj, H0_decision) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = 100 * count / sum(count)) %>%
+  left_join(freq_decis) %>%
+  select(sim_type : H0_decision, decision, characterization, count, percentage) %>%
+  arrange(sim_type, Nsubj, decision, characterization) %>%
+  kable(digits = 1)
+```
+
+Note that the frequentist power analysis for the *same* data are much more
+lenient. This is particularly noticeable in the power estimates (type 2) for
+sample sizes of 15.
+
 
 
 Sanity check: Are we retrieving the correct estimates?
 -----------------------------------------------------
 
 Since we are simulating the data sets, we *know* what the population-level
-effects are, both for fixed and random effects. Are our models correctly
+effects are, both for fixed and random effecs variance. Are our models correctly
 retrieving them?
 
-First, estimates of the population-level effect for the critical interaction:
+Most importantly, the estimates of the population-level effect for the critical
+interaction:
 
 ```{r}
+mylines <- tibble(sim_type = unique(sims_coef$sim_type), myy = c(fixef_means[4], 0))
 sims_coef %>%
   filter(term == "mv_wt") %>%
-  ggplot(aes(x = factor(Nsubj), y = estimate)) + 
+  ggplot(aes(x = factor(Nsubj), y = estimate)) +
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(. ~ sim_type) +
-  geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = "blue") +
-  ylab("Estimate")
+  geom_hline(data = mylines, aes(yintercept = myy), colour = "red", linetype = "dashed")
 ```
 
 
-Estimates of the random by-subject variation for critical effect:
+Estimates of the random by-subject variation for critical effect.
+Note that these tend to be overestimated, especially in the Type 2 simulations.
 
 ```{r}
 sims_coef %>%
   filter(grepl("sd_mv_wt\\.subject", term)) %>%
   ggplot(aes(x = factor(Nsubj), y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(. ~ sim_type) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed")
 ```
@@ -767,7 +808,7 @@ sims_coef %>%
   filter(grepl("sd_\\(Intercept\\).subject", term)) %>%
   ggplot(aes(x = factor(Nsubj), y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(. ~ sim_type) +
   geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed")
 ```
@@ -777,19 +818,13 @@ sims_coef %>%
 
 
 
-Conclusion (Revise this!!!)
+Conclusion
 ==========
 
-Our proposed design with $N_{min}=60$ and $N_{max}=96$ (step size = 12) and the
+Our proposed design with $N_{min}=60$, $N_{max}=108$ (step size = 12), and the
 evidence threshold set at $BF_{10} > 6$ or $BF_{01} > 6$ will largely suffice to
-guarantee high power (>90%) if the effect was as strong as reported in the
-original study. 
-Taking into account, however, that a) our re-analysis of the original data suggests
-that the effect size might have been severely over-estimated, and b) the
-original ANOVA-based analysis seem inappropriate for the data at hand, we have
-chosen a design that will also guarantee  a high probability of compelling
-evidence using an improved analysis method and with a small-to-medium effect size.
-
+guarantee high power (>90%) if the effect is as strong as indicated by our
+improved reanalysis of the original data.
 
 
 Appendix: Converged vs non-converged models
@@ -801,11 +836,10 @@ the H1. In other words, our choice of excluding them makes our results more
 conservative:
 
 
-
 ```{r}
 ggplot(sims_BIC_all, aes(x = converged, y = log10(BF_BIC))) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  # geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(sim_type ~ Nsubj) +
   geom_hline(yintercept = log10(6), linetype = "dashed", colour = "red") +
   geom_hline(yintercept = log10(1/6), linetype = "dashed", colour = "blue") +
@@ -813,13 +847,12 @@ ggplot(sims_BIC_all, aes(x = converged, y = log10(BF_BIC))) +
 ```
 
 
-
 ```{r}
 sims_coef_all %>%
   filter(term == "mv_wt") %>%
   ggplot(aes(x = converged, y = statistic)) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  # geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(sim_type ~ Nsubj) +
   geom_hline(yintercept = 2, linetype = "dashed")
 ```
@@ -830,40 +863,12 @@ sims_coef_all %>%
   filter(term == "mv_wt") %>%
   ggplot(aes(x = converged, y = estimate)) + 
   geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
+  # geom_jitter(height = 0, alpha = myalpha, colour = jitter_colour) +
   facet_grid(sim_type ~ Nsubj) +
   geom_hline(yintercept = fixef_means[4], linetype = "dashed") +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "blue") +
   ylab("Estimate")
 ```
-
-
-Estimates of the random by-subject variation for critical effect:
-
-```{r}
-sims_coef_all %>%
-  filter(grepl("sd_mv_wt\\.subject", term)) %>%
-  ggplot(aes(x = sim_type, y = estimate)) + 
-  geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(converged ~ Nsubj) +
-  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[4]), linetype = "dashed") +
-  ylab("Estimate")
-```
-
-```{r}
-sims_coef_all %>%
-  filter(grepl("sd_\\(Intercept\\).subject", term)) %>%
-  ggplot(aes(x = converged, y = estimate)) + 
-  geom_boxplot() +
-  geom_jitter(height = 0, alpha = myalpha) +
-  facet_grid(sim_type ~ Nsubj) +
-  geom_hline(yintercept = sqrt(diag(ranef_sigma_subj)[1]), linetype = "dashed") +
-  ylab("Estimate")
-```
-
-
-
 
 
 Session info
